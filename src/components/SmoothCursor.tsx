@@ -137,7 +137,7 @@ export const SmoothCursor = ({ editor }: { editor: Editor | null }) => {
 
     // Transition styles
     const transitionStyle = shouldAnimate
-        ? 'all 0.1s cubic-bezier(0, 0, 0.1, 1)'
+        ? 'all 0.08s cubic-bezier(0, 0, 0.08, 1)'
         : 'none';
 
     // Combine blinking opacity with hidden state

@@ -245,6 +245,9 @@ button {
     caret-color: transparent !important;
     /* Hide native caret */
     font-size: var(--editor-font-size);
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 /* Custom Cursor Animation - Smooth Fade */
@@ -279,6 +282,9 @@ button {
     min-height: 1.5em;
     /* Ensure empty lines have height */
     caret-color: transparent !important;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 /* Ensure images never overflow the editor width */
@@ -321,6 +327,9 @@ button {
 .block-list-item {
     display: flex;
     align-items: flex-start;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 .block-list-item>.bullet-point {

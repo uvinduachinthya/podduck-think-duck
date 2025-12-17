@@ -3,7 +3,6 @@ import React, { useRef, useState, useEffect, useCallback, createContext, useCont
 import { format, isToday, isYesterday, isThisWeek, isThisYear, differenceInMinutes, parse } from 'date-fns';
 import {
     Folder,
-    FileText as NoteIcon,
     FilePlus as AddIcon,
     Settings as SettingsIcon,
     Calendar as CalendarIcon,
@@ -628,7 +627,7 @@ function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemF
             attributes: {
                 class: 'tiptap block-outliner',
             },
-            handlePaste: (view, event, slice) => {
+            handlePaste: (_view, event, _slice) => {
                 const items = Array.from(event.clipboardData?.items || []);
                 const imageItem = items.find(item => item.type.indexOf('image') === 0);
 
@@ -676,7 +675,7 @@ function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemF
                 }
                 return false;
             },
-            handleTextInput: (view, from, to, text) => {
+            handleTextInput: (view) => {
                 const { state } = view;
                 const { selection } = state;
                 const { $from } = selection;
@@ -1370,7 +1369,7 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
                             style={{ height: '100%' }}
                             data={regularNotes}
                             context={{ currentFile, selectFile, editingFileId, editValue, startEditing, submitRename, cancelRename, checkDelete }}
-                            itemContent={(index, file, context) => <SidebarItem file={file} context={context} />}
+                            itemContent={(_index, file, context) => <SidebarItem file={file} context={context} />}
                         />
                     </div>
                 </div>
@@ -1429,7 +1428,7 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
 
 
 function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, onSearchClick }: { isSidebarOpen: boolean; toggleSidebar: () => void; showSidebarToggle?: boolean; onSearchClick: () => void }) {
-    const { currentFile, saveFile, createNewNote, files, openDateNote, deleteFile, renameFile, openDirectory } = useFileSystem();
+    const { currentFile, saveFile, files, openDateNote, deleteFile, renameFile, openDirectory } = useFileSystem();
     const { theme } = useTheme();
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');

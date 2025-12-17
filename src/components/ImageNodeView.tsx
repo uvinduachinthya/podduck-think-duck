@@ -10,7 +10,7 @@ export const ImageNodeView = (props: NodeViewProps) => {
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
     // Select image on right click to ensure context is correct
-    const handleContextMenu = (e: React.MouseEvent) => {
+    const handleContextMenu = (_e: React.MouseEvent) => {
         if (!selected) {
             const pos = props.getPos();
             if (typeof pos === 'number') {

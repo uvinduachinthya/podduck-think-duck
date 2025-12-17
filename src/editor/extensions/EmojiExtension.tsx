@@ -4,7 +4,7 @@ import { PluginKey } from 'prosemirror-state';
 import { ReactRenderer } from '@tiptap/react';
 import tippy from 'tippy.js';
 import { EmojiSuggestions } from '../../components/EmojiSuggestions';
-import { searchEmojis, type EmojiItem } from '../../utils/emojiData';
+import { searchEmojis } from '../../utils/emojiData';
 
 export const EmojiExtension = Extension.create({
     name: 'emojiExtension',

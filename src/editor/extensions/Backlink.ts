@@ -233,7 +233,7 @@ export const Backlink = Node.create<BacklinkOptions>({
             const clickPlugin = new Plugin({
                 key: new PluginKey('backlinkClick'),
                 props: {
-                    handleClick: (view, pos, event) => {
+                    handleClick: (view, pos, _event) => {
                         const { doc } = view.state;
                         const clickedNode = doc.nodeAt(pos);
 

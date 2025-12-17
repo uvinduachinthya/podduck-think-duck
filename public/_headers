@@ -1,0 +1,21 @@
+# Cloudflare Pages Headers Configuration
+# This fixes MIME type issues for JavaScript modules
+
+# Set correct MIME types for all JavaScript files
+/*.js
+  Content-Type: application/javascript; charset=utf-8
+
+# Set correct MIME type for CSS files
+/*.css
+  Content-Type: text/css; charset=utf-8
+
+# Set correct MIME type for HTML files
+/*.html
+  Content-Type: text/html; charset=utf-8
+
+# Security headers
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  X-XSS-Protection: 1; mode=block
+  Referrer-Policy: strict-origin-when-cross-origin

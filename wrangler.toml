@@ -1,0 +1,16 @@
+# Cloudflare Pages build configuration
+
+# Build command
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Environment variables (if needed)
+[build.environment]
+  NODE_VERSION = "20"
+
+# Redirects and rewrites (SPA fallback)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

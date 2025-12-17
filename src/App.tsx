@@ -1358,7 +1358,7 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
 
             {rootHandle && (
 
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '8px', overflow: 'hidden' }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '8px 8px 0', overflow: 'hidden' }}>
                     {regularNotes.length > 0 && (
                         <div style={{ color: 'var(--sidebar-text-muted)', padding: '8px 8px 4px', fontWeight: 600, textTransform: 'uppercase', marginLeft: '5px', fontSize: '0.75em', flexShrink: 0 }}>
                             NOTES ({regularNotes.length})
@@ -1376,8 +1376,8 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
                 </div>
             )}
 
-            {/* Spacer to push settings to bottom */}
-            <div style={{ flex: 1 }} />
+            {/* Spacer to push settings to bottom - only when no folder is open */}
+            {!rootHandle && <div style={{ flex: 1 }} />}
 
             <div
                 onClick={onSettingsClick}

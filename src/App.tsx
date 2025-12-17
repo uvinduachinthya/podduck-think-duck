@@ -16,7 +16,8 @@ import {
     ExternalLink as NewTabIcon,
     AppWindow as NewWindowIcon,
     MoreVertical,
-    MoreHorizontal
+    MoreHorizontal,
+    X
 } from 'lucide-react';
 import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
 import Document from '@tiptap/extension-document';
@@ -37,6 +38,9 @@ import { ImageNodeView } from './components/ImageNodeView';
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog';
 import { SearchModal } from './components/SearchModal';
 import { Virtuoso } from 'react-virtuoso';
+import origamiDucklings from './assets/origami-ducklings.webp';
+import origamiDucklingsDark from './assets/origami-ducklings-dark.webp';
+import { useTheme } from './context/ThemeContext';
 
 // File Types
 interface FileNode {
@@ -718,7 +722,7 @@ function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemF
             editor.commands.setContent(initialContent);
             requestAnimationFrame(() => {
                 if (!editor.isDestroyed) {
-                    editor.commands.focus('start');
+                    editor.commands.focus('end');
                 }
             });
         }
@@ -1175,6 +1179,8 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
     const { folderName, files, currentFile, rootHandle, openDirectory, selectFile, createNewNote, openDailyNoteManually, renameFile, deleteFile } = useFileSystem();
     const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null);
     const [editingFileId, setEditingFileId] = useState<string | null>(null);
+    const [isFolderMenuOpen, setIsFolderMenuOpen] = useState(false);
+    const [showCloseFolderConfirm, setShowCloseFolderConfirm] = useState(false);
     const [editValue, setEditValue] = useState('');
 
     const startEditing = (file: FileNode) => {
@@ -1248,9 +1254,62 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
                 marginLeft: isOpen ? '0' : 'calc(-1 * var(--sidebar-width))'
             }}
         >
-            <div onClick={openDirectory} className="sidebar-header">
+            <div className="sidebar-header" style={{ cursor: 'default', position: 'relative' }}>
                 <Folder className="w-[18px] h-[18px]" style={{ width: '18px', height: '18px' }} />
-                <span style={{ fontWeight: 500 }}>{folderName || 'Open Folder...'}</span>
+                <span style={{ fontWeight: 500 }}>{folderName || 'No Folder'}</span>
+                {rootHandle && (
+                    <>
+                        <button
+                            onClick={() => setIsFolderMenuOpen(!isFolderMenuOpen)}
+                            className="icon-btn"
+                            style={{
+                                marginLeft: 'auto',
+                                padding: '4px',
+                            }}
+                            title="Folder options"
+                        >
+                            <MoreVertical className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
+                        </button>
+                        {isFolderMenuOpen && (
+                            <>
+                                <div
+                                    style={{
+                                        position: 'fixed',
+                                        top: 0,
+                                        left: 0,
+                                        right: 0,
+                                        bottom: 0,
+                                        zIndex: 999,
+                                    }}
+                                    onClick={() => setIsFolderMenuOpen(false)}
+                                />
+                                <div className="dropdown-menu" style={{ top: '100%', right: '8px', left: 'auto' }}>
+                                    <div
+                                        onClick={() => {
+                                            openDirectory();
+                                            setIsFolderMenuOpen(false);
+                                        }}
+                                        className="dropdown-item"
+                                    >
+                                        <Folder className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
+                                        <span>Switch Folder</span>
+                                    </div>
+                                    <div
+                                        onClick={() => {
+                                            setShowCloseFolderConfirm(true);
+                                            setIsFolderMenuOpen(false);
+                                        }}
+                                        className="dropdown-item"
+                                        style={{ color: 'var(--danger-color, #ff4d4f)' }}
+                                    >
+                                        <X className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
+                                        <span>Close Folder</span>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </>
+                )}
             </div>
 
 
@@ -1317,6 +1376,8 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
                 </div>
             )}
 
+            {/* Spacer to push settings to bottom */}
+            <div style={{ flex: 1 }} />
 
             <div
                 onClick={onSettingsClick}
@@ -1334,13 +1395,42 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
                 onConfirm={confirmDelete}
                 onCancel={cancelDelete}
             />
+
+            {/* Close Folder Confirmation Dialog */}
+            <DeleteConfirmDialog
+                isOpen={showCloseFolderConfirm}
+                fileName={folderName || 'folder'}
+                title="Close Folder"
+                message={`Are you sure you want to close <strong style="color: var(--text-primary)">${folderName || 'this folder'}</strong>? Any unsaved changes will be lost.`}
+                confirmButtonText="Close Folder"
+                showDontAskAgain={false}
+                onConfirm={async () => {
+                    // Clear folder from IndexedDB
+                    try {
+                        const db = await window.indexedDB.open('ThinkDuckDB', 1);
+                        db.onsuccess = () => {
+                            const tx = db.result.transaction('folders', 'readwrite');
+                            tx.objectStore('folders').delete('lastFolder');
+                            tx.oncomplete = () => {
+                                window.location.reload();
+                            };
+                        };
+                    } catch (e) {
+                        console.error('Error clearing folder:', e);
+                        window.location.reload();
+                    }
+                    setShowCloseFolderConfirm(false);
+                }}
+                onCancel={() => setShowCloseFolderConfirm(false)}
+            />
         </div>
     );
 }
 
 
 function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, onSearchClick }: { isSidebarOpen: boolean; toggleSidebar: () => void; showSidebarToggle?: boolean; onSearchClick: () => void }) {
-    const { currentFile, saveFile, createNewNote, files, openDateNote, deleteFile, renameFile } = useFileSystem();
+    const { currentFile, saveFile, createNewNote, files, openDateNote, deleteFile, renameFile, openDirectory } = useFileSystem();
+    const { theme } = useTheme();
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [currentEditor, setCurrentEditor] = useState<any>(null);
@@ -1444,12 +1534,15 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                         </div>
                     )
                 }
-                <p>Select a note or create a new one</p>
+                <img
+                    src={theme === 'dark' ? origamiDucklingsDark : origamiDucklings}
+                    alt="Origami ducklings"
+                    draggable={false}
+                    style={{ height: '100px', marginBottom: '16px', pointerEvents: 'none', userSelect: 'none' }}
+                />
+                <p>Open a folder to get started</p>
                 <button
-                    onClick={() => {
-                        const filename = getNextQuackNoteName(files);
-                        createNewNote(filename);
-                    }}
+                    onClick={openDirectory}
                     style={{
                         marginTop: '16px',
                         padding: '8px 16px',
@@ -1460,7 +1553,7 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                         cursor: 'pointer'
                     }}
                 >
-                    Create Note
+                    Open Folder
                 </button>
             </div >
         );

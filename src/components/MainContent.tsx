@@ -1,4 +1,5 @@
 import { useFileSystem } from '../hooks/useFileSystem';
+import origamiDucklings from '../assets/origami-ducklings.webp';
 
 export function MainContent() {
     const { currentFile } = useFileSystem();
@@ -30,6 +31,11 @@ export function MainContent() {
                     color: 'var(--text-secondary)'
                 }}>
                     <div style={{ textAlign: 'center' }}>
+                        <img
+                            src={origamiDucklings}
+                            alt="Origami ducklings"
+                            style={{ height: '100px', marginBottom: '16px' }}
+                        />
                         <p style={{ fontSize: '18px', marginBottom: '8px' }}>No note selected</p>
                         <p style={{ fontSize: '14px' }}>Open a folder and select a file from the sidebar</p>
                     </div>

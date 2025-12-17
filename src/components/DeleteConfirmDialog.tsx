@@ -5,12 +5,27 @@ interface DeleteConfirmDialogProps {
     fileName: string;
     onConfirm: (dontAskAgain: boolean) => void;
     onCancel: () => void;
+    title?: string;
+    message?: string;
+    confirmButtonText?: string;
+    showDontAskAgain?: boolean;
 }
 
-export function DeleteConfirmDialog({ isOpen, fileName, onConfirm, onCancel }: DeleteConfirmDialogProps) {
+export function DeleteConfirmDialog({
+    isOpen,
+    fileName,
+    onConfirm,
+    onCancel,
+    title = 'Confirm Deletion',
+    message,
+    confirmButtonText = 'Delete',
+    showDontAskAgain = true
+}: DeleteConfirmDialogProps) {
     const [dontAsk, setDontAsk] = useState(false);
 
     if (!isOpen) return null;
+
+    const defaultMessage = `Are you sure you want to delete <strong style="color: var(--text-primary)">${fileName}</strong>? This action cannot be undone.`;
 
     return (
         <div style={{
@@ -35,23 +50,26 @@ export function DeleteConfirmDialog({ isOpen, fileName, onConfirm, onCancel }: D
                 border: '1px solid var(--sidebar-border)',
                 color: 'var(--text-primary)',
             }}>
-                <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 600 }}>Confirm Deletion</h3>
-                <p style={{ margin: '0 0 20px 0', color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.5' }}>
-                    Are you sure you want to delete <strong style={{ color: 'var(--text-primary)' }}>{fileName}</strong>? This action cannot be undone.
-                </p>
+                <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 600 }}>{title}</h3>
+                <p
+                    style={{ margin: '0 0 20px 0', color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.5' }}
+                    dangerouslySetInnerHTML={{ __html: message || defaultMessage }}
+                />
 
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '24px' }}>
-                    <input
-                        type="checkbox"
-                        id="dontAsk"
-                        checked={dontAsk}
-                        onChange={(e) => setDontAsk(e.target.checked)}
-                        style={{ marginRight: '8px', cursor: 'pointer' }}
-                    />
-                    <label htmlFor="dontAsk" style={{ fontSize: '14px', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
-                        Don't ask me again
-                    </label>
-                </div>
+                {showDontAskAgain && (
+                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '24px' }}>
+                        <input
+                            type="checkbox"
+                            id="dontAsk"
+                            checked={dontAsk}
+                            onChange={(e) => setDontAsk(e.target.checked)}
+                            style={{ marginRight: '8px', cursor: 'pointer' }}
+                        />
+                        <label htmlFor="dontAsk" style={{ fontSize: '14px', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
+                            Don't ask me again
+                        </label>
+                    </div>
+                )}
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
                     <button
@@ -64,7 +82,7 @@ export function DeleteConfirmDialog({ isOpen, fileName, onConfirm, onCancel }: D
                         onClick={() => onConfirm(dontAsk)}
                         className="btn btn-danger"
                     >
-                        Delete
+                        {confirmButtonText}
                     </button>
                 </div>
             </div>

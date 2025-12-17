@@ -30,6 +30,21 @@ export const SmoothCursor = ({ editor }: { editor: Editor | null }) => {
             wasMouseInteractionRef.current = false;
         };
 
+        // Global click listener to detect clicks outside the editor
+        const handleGlobalClick = (e: MouseEvent) => {
+            if (!editor || editor.isDestroyed || !editor.view) return;
+
+            // Get the editor DOM element
+            const editorElement = editor.view.dom;
+            const target = e.target as Node;
+
+            // Check if click is outside the editor
+            if (editorElement && !editorElement.contains(target)) {
+                // Click is outside the editor, hide cursor
+                setIsVisible(false);
+            }
+        };
+
         const updateCursor = (e?: any) => {
             if (editor.isDestroyed || !editor.view) return;
             const { selection } = editor.state;
@@ -98,7 +113,12 @@ export const SmoothCursor = ({ editor }: { editor: Editor | null }) => {
             }
         };
 
-        const handleFocus = () => setIsVisible(true);
+        const handleFocus = () => {
+            setIsVisible(true);
+            // Force cursor update on focus to ensure correct position
+            updateCursor();
+        };
+
         const handleBlur = () => setIsVisible(false);
 
         editor.on('selectionUpdate', updateCursor);
@@ -111,6 +131,9 @@ export const SmoothCursor = ({ editor }: { editor: Editor | null }) => {
         window.addEventListener('keydown', handleKeyDown, true);
         window.addEventListener('scroll', updateCursor, true);
         window.addEventListener('resize', updateCursor);
+
+        // Add global click listener to detect clicks outside editor
+        document.addEventListener('click', handleGlobalClick, true);
 
         if (!editor.isDestroyed && editor.view && editor.isFocused) {
             updateCursor();
@@ -127,6 +150,7 @@ export const SmoothCursor = ({ editor }: { editor: Editor | null }) => {
             window.removeEventListener('keydown', handleKeyDown, true);
             window.removeEventListener('scroll', updateCursor, true);
             window.removeEventListener('resize', updateCursor);
+            document.removeEventListener('click', handleGlobalClick, true);
 
             if (timeoutRef.current) clearTimeout(timeoutRef.current);
             if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);

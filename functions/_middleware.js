@@ -13,7 +13,7 @@ export async function onRequest(context) {
     const pathname = url.pathname;
 
     // Set correct MIME type based on file extension
-    if (pathname.endsWith('.js')) {
+    if (pathname.endsWith('.js') || pathname.endsWith('.tsx') || pathname.endsWith('.ts')) {
         newResponse.headers.set('Content-Type', 'application/javascript; charset=utf-8');
     } else if (pathname.endsWith('.css')) {
         newResponse.headers.set('Content-Type', 'text/css; charset=utf-8');

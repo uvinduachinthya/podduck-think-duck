@@ -27,6 +27,7 @@ import { Backlink } from './editor/extensions/Backlink';
 import { CollapsibleListItem } from './editor/extensions/CollapsibleListItem';
 import { EmojiExtension, EmojiSuggestionOptions } from './editor/extensions/EmojiExtension';
 import { SlashCommandExtension, SlashCommandOptions } from './editor/extensions/SlashCommandExtension';
+import { AutoCloseExtension } from './editor/extensions/AutoCloseExtension';
 
 import { DailyNotesCalendar } from './components/DailyNotesCalendar';
 import Image from '@tiptap/extension-image';
@@ -560,10 +561,29 @@ function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemF
                             type: item.type,
                             pageId: item.pageId,
                         };
+
+                        // Check for trailing `]` or `]]` to prevent duplication (e.g. from auto-close)
+                        const { state } = editor;
+                        const { doc } = state;
+                        let deleteTo = range.to;
+
+                        // Check next 2 chars safely
+                        try {
+                            // Helper to get text without error if out of bounds
+                            const nextTwo = doc.textBetween(range.to, Math.min(range.to + 2, doc.content.size), '\n', ' ');
+                            if (nextTwo === ']]') {
+                                deleteTo += 2;
+                            } else if (nextTwo.startsWith(']')) {
+                                deleteTo += 1;
+                            }
+                        } catch (e) {
+                            // Ignore range errors
+                        }
+
                         editor
                             .chain()
                             .focus()
-                            .insertContentAt(range, [
+                            .insertContentAt({ from: range.from, to: deleteTo }, [
                                 { type: 'backlink', attrs: nodeAttrs },
                                 { type: 'text', text: ' ' },
                             ])
@@ -571,6 +591,12 @@ function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemF
                     },
                     items: async ({ query }) => {
                         // Logic to handle [[ trigger
+                        // 1. Force close if query contains closing brackets
+                        if (query.includes(']')) {
+                            return [];
+                        }
+
+                        // 2. Only trigger if we have the second bracket (start of sequence)
                         if (query.length === 0 && query !== '[') {
                             // partial match logic if needed
                         }
@@ -604,6 +630,13 @@ function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemF
                             onUpdate(props: any) {
                                 component.updateProps(props);
                                 if (!props.clientRect) return;
+
+                                // Force hide if query contains closing bracket
+                                if (props.query.includes(']')) {
+                                    popup[0].hide();
+                                    return;
+                                }
+
                                 popup[0].setProps({ getReferenceClientRect: props.clientRect });
                             },
                             onKeyDown(props: any) {
@@ -629,6 +662,7 @@ function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemF
                     return ReactNodeViewRenderer(ImageNodeView)
                 },
             }),
+            AutoCloseExtension,
         ],
         content: initialContent,
         editorProps: {

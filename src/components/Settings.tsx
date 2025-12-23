@@ -253,7 +253,7 @@ function AboutSection() {
             <h2 className="about-title">Thinkduck</h2>
 
             {/* Version */}
-            <p className="about-version">Version 1.0.4 Beta</p>
+            <p className="about-version">Version 1.0.5 Beta</p>
 
             {/* Description */}
             <p className="about-desc">

@@ -24,7 +24,9 @@ export const BacklinkSuggestions = forwardRef<BacklinkSuggestionsHandle, Backlin
             const item = props.items[index];
             if (item) {
                 props.command(item);
+                return true;
             }
+            return false;
         };
 
         const upHandler = () => {
@@ -36,7 +38,7 @@ export const BacklinkSuggestions = forwardRef<BacklinkSuggestionsHandle, Backlin
         };
 
         const enterHandler = () => {
-            selectItem(selectedIndex);
+            return selectItem(selectedIndex);
         };
 
         useImperativeHandle(ref, () => ({
@@ -52,8 +54,7 @@ export const BacklinkSuggestions = forwardRef<BacklinkSuggestionsHandle, Backlin
                 }
 
                 if (event.key === 'Enter') {
-                    enterHandler();
-                    return true;
+                    return enterHandler();
                 }
 
                 return false;

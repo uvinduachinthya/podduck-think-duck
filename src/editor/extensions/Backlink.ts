@@ -36,12 +36,15 @@ export const Backlink = Node.create<BacklinkOptions>({
         return {
             HTMLAttributes: {},
             renderLabel({ node }) {
-                return `@${node.attrs.label}`;
+                return `[[${node.attrs.label}]]`;
             },
             onNavigate: undefined,
             suggestion: {
-                char: '@',
+                char: '[',
+                allowSpaces: true,
                 command: ({ editor, range, props }) => {
+                    // range includes the trigger character '[' + query
+                    // We need to make sure we replace the extra '[' if it was part of the query logic
                     editor
                         .chain()
                         .focus()
@@ -58,7 +61,33 @@ export const Backlink = Node.create<BacklinkOptions>({
                         .run();
                 },
                 items: ({ query }) => {
-                    return searchItems(query);
+                    // Only trigger if we have a second bracket
+                    // The trigger char is '['.
+                    // If the user types '[[', the query passed here will start with '[' (depending on how fast they type)
+                    // or we might need to rely on the fact that we permit spaces and look for the pattern.
+
+                    // Actually, a simpler way for 'char: [' is:
+                    // If we want exact '[[' behavior with the suggestion plugin:
+                    // If the user types '[', query is empty string "". We return [] to hide.
+
+                    // But standard suggestion plugin splits by space by default unless allowSpaces is true.
+                    // With allowSpaces: true, '[[foo' -> char '[', query '[foo'.
+
+                    if (query.length === 0 && query !== '[') {
+                        // Just a single '[' or empty query
+                        // We can't easily detect the second '[' purely by query length 0 if typing fast.
+                        // But if query starts with '[', it means we have '[['.
+                    }
+
+                    // Let's check for the second bracket in the query
+                    if (query.startsWith('[')) {
+                        const realQuery = query.substring(1); // Remove the second '['
+                        return searchItems(realQuery);
+                    }
+
+                    // If query doesn't start with '[', it's just a single bracket usage like "[Something"
+                    // We don't want to trigger.
+                    return [];
                 },
                 render: () => {
                     let component: ReactRenderer<BacklinkSuggestionsHandle>;

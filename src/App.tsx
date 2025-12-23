@@ -539,7 +539,7 @@ function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemF
                     class: 'backlink',
                 },
                 renderLabel({ node }) {
-                    return node.attrs.label || '';
+                    return `[[${node.attrs.label || ''}]]`;
                 },
                 onNavigate: (pageId: string) => {
                     const targetFile = files.find(f => f.name === `${pageId}.json`);
@@ -550,7 +550,8 @@ function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemF
                     }
                 },
                 suggestion: {
-                    char: '@',
+                    char: '[',
+                    allowSpaces: true,
                     command: ({ editor, range, props }) => {
                         const item = props as any;
                         const nodeAttrs = {
@@ -569,7 +570,16 @@ function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemF
                             .run();
                     },
                     items: async ({ query }) => {
-                        return search(query);
+                        // Logic to handle [[ trigger
+                        if (query.length === 0 && query !== '[') {
+                            // partial match logic if needed
+                        }
+
+                        if (query.startsWith('[')) {
+                            const realQuery = query.substring(1);
+                            return search(realQuery);
+                        }
+                        return [];
                     },
                     render: () => {
                         let component: any;
@@ -1445,7 +1455,7 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
 
             // Try parsing "October 20th, 2025"
             try {
-                if (/^[A-Za-z]+ \d{1, 2}(?:st|nd|rd|th), \d{4}$/.test(name)) {
+                if (/^[A-Za-z]+ \d{1,2}(?:st|nd|rd|th), \d{4}$/.test(name)) {
                     const parsedDate = parse(name, 'MMMM do, yyyy', new Date());
                     if (!isNaN(parsedDate.getTime())) {
                         return format(parsedDate, 'yyyy-MM-dd');

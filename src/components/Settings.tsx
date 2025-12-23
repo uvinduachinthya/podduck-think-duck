@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import logo from '../assets/thinkduck-logo.png';
 import { AboutIcon } from './AboutIcon';
+import { APP_VERSION } from '../version';
 
 interface SettingsProps {
     isOpen: boolean;
@@ -253,7 +254,7 @@ function AboutSection() {
             <h2 className="about-title">Thinkduck</h2>
 
             {/* Version */}
-            <p className="about-version">Version 1.0.5 Beta</p>
+            <p className="about-version">Version {APP_VERSION}</p>
 
             {/* Description */}
             <p className="about-desc">

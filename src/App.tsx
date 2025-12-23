@@ -47,6 +47,8 @@ import { BrowserNotSupported } from './components/BrowserNotSupported';
 
 import { FileSystemProvider, useFileSystem, FileSystemContext, type FileNode } from './context/FileSystemContext';
 import { BacklinkNode } from './components/BacklinkNode';
+import { UpdatePopup } from './components/UpdatePopup';
+import { APP_VERSION } from './version';
 
 // Editor Component starts here
 
@@ -1590,6 +1592,25 @@ export default function App() {
 
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [showUpdatePopup, setShowUpdatePopup] = useState(false);
+
+    // Check for updates
+    useEffect(() => {
+        if (isPopup) return;
+
+        const lastSeenVersion = localStorage.getItem('lastSeenVersion');
+        if (lastSeenVersion !== APP_VERSION) {
+            // Delay slightly to let app load
+            setTimeout(() => {
+                setShowUpdatePopup(true);
+            }, 1000);
+        }
+    }, [isPopup]);
+
+    const closeUpdatePopup = () => {
+        setShowUpdatePopup(false);
+        localStorage.setItem('lastSeenVersion', APP_VERSION);
+    };
 
     // Keyboard shortcuts
     useEffect(() => {
@@ -1629,6 +1650,7 @@ export default function App() {
                 <MainContent isSidebarOpen={isSidebarOpen} toggleSidebar={toggleSidebar} showSidebarToggle={!isPopup} onSearchClick={() => setIsSearchOpen(true)} />
             </div>
             {!isPopup && <Settings isOpen={isSettingsOpen} onClose={closeSettings} />}
+            {!isPopup && <UpdatePopup isOpen={showUpdatePopup} onClose={closeUpdatePopup} />}
             <FileSystemContext.Consumer>
                 {(context) => (
                     <SearchModal

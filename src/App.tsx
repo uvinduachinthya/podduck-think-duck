@@ -1,5 +1,5 @@
 import './index.css'
-import React, { useRef, useState, useEffect, useCallback, createContext, useContext, useMemo, useReducer } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo, useReducer } from 'react';
 import { format, isToday, isYesterday, isThisWeek, isThisYear, differenceInMinutes, parse } from 'date-fns';
 import {
     Folder,
@@ -22,7 +22,7 @@ import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
 import Document from '@tiptap/extension-document';
 import StarterKit from '@tiptap/starter-kit';
 import { Settings } from './components/Settings';
-import { useSearchWorker, type SearchResult } from './hooks/useSearchWorker';
+
 import { Backlink } from './editor/extensions/Backlink';
 import { CollapsibleListItem } from './editor/extensions/CollapsibleListItem';
 import { EmojiExtension, EmojiSuggestionOptions } from './editor/extensions/EmojiExtension';
@@ -37,401 +37,18 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { ImageNodeView } from './components/ImageNodeView';
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog';
 import { SearchModal } from './components/SearchModal';
+import { searchItems, type SearchableItem } from './utils/searchIndex';
 import { Virtuoso } from 'react-virtuoso';
 import origamiDucklings from './assets/origami-ducklings.webp';
 import origamiDucklingsDark from './assets/origami-ducklings-dark.webp';
 import { useTheme } from './context/ThemeContext';
-
-// File Types
-interface FileNode {
-    name: string;
-    handle: FileSystemFileHandle;
-    lastModified: number;
-}
-
-// FileSystem Context
-interface FileSystemContextType {
-    folderName: string | null;
-    files: FileNode[];
-    currentFile: FileNode | null;
-    rootHandle: FileSystemDirectoryHandle | null;
-    openDirectory: () => Promise<void>;
-    selectFile: (file: FileNode) => void;
-    saveFile: (content: string) => Promise<void>;
-    createNewNote: (filename: string) => Promise<void>;
-    renameFile: (oldName: string, newName: string) => Promise<void>;
-    deleteFile: (filename: string) => Promise<void>;
-    restoreFile: (filename: string) => void;
-    openDailyNoteManually: () => Promise<void>;
-    openDateNote: (dateString: string) => Promise<void>;
-    search: (query: string) => Promise<SearchResult[]>;
-}
-
-const FileSystemContext = createContext<FileSystemContextType | undefined>(undefined);
-
-function FileSystemProvider({ children }: { children: React.ReactNode }) {
-    const [folderName, setFolderName] = useState<string | null>(null);
-    const [files, setFiles] = useState<FileNode[]>([]);
-    const [currentFile, setCurrentFile] = useState<FileNode | null>(null);
-    const [rootHandle, setRootHandle] = useState<FileSystemDirectoryHandle | null>(null);
-    const syncChannel = useRef<BroadcastChannel | null>(null);
-    const { buildIndex, updateFile, removeFile, searchAsync } = useSearchWorker();
-
-    const refreshFiles = useCallback(async (handle: FileSystemDirectoryHandle) => {
-        const filePromises: Promise<FileNode>[] = [];
-        for await (const entry of (handle as any).values()) {
-            if (entry.kind === 'file' && entry.name.endsWith('.json')) {
-                filePromises.push(entry.getFile().then((file: File) => ({
-                    name: entry.name,
-                    handle: entry,
-                    lastModified: file.lastModified
-                })));
-            }
-        }
-        const fileList = await Promise.all(filePromises);
-        const sorted = fileList.sort((a, b) => b.lastModified - a.lastModified);
-        setFiles(sorted);
-        return sorted;
-    }, []);
-
-    // Initialize BroadcastChannel
-    useEffect(() => {
-        syncChannel.current = new BroadcastChannel('think-duck-sync');
-
-        syncChannel.current.onmessage = (event) => {
-            const { type, filename } = event.data;
-            console.log('[Sync] Received:', type, filename);
-
-            if (rootHandle) {
-                if (type === 'DELETE_FILE' || type === 'RESTORE_FILE') {
-                    refreshFiles(rootHandle);
-                }
-            }
-        };
-
-        return () => {
-            syncChannel.current?.close();
-        };
-    }, [rootHandle, refreshFiles]);
+import { BrowserNotSupported } from './components/BrowserNotSupported';
 
 
+import { FileSystemProvider, useFileSystem, FileSystemContext, type FileNode } from './context/FileSystemContext';
+import { BacklinkNode } from './components/BacklinkNode';
 
-    const openDailyNote = useCallback(async (handle: FileSystemDirectoryHandle) => {
-        const today = new Date();
-        const dailyNoteName = `${format(today, 'MMMM do, yyyy')}.json`;
-
-        try {
-            const fileHandle = await handle.getFileHandle(dailyNoteName, { create: true });
-            const file = await fileHandle.getFile();
-            if (file.size === 0) {
-                const writable = await fileHandle.createWritable();
-                await writable.write('');
-                await writable.close();
-            }
-            await refreshFiles(handle);
-            setCurrentFile({ name: dailyNoteName, handle: fileHandle, lastModified: Date.now() });
-            console.log('[Auto] Opened daily note:', dailyNoteName);
-        } catch (err) {
-            console.error('[Auto] Error with daily note:', err);
-        }
-    }, [refreshFiles]);
-
-    const openDirectory = useCallback(async () => {
-        try {
-            const handle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
-            setRootHandle(handle);
-            setFolderName(handle.name);
-
-            // Save to IndexedDB for persistence
-            const db = await window.indexedDB.open('ThinkDuckDB', 1);
-            db.onupgradeneeded = () => {
-                db.result.createObjectStore('folders');
-            };
-            db.onsuccess = () => {
-                const tx = db.result.transaction('folders', 'readwrite');
-                tx.objectStore('folders').put(handle, 'lastFolder');
-            };
-
-            await refreshFiles(handle);
-            await openDailyNote(handle);
-
-            // Build search index in worker
-            buildIndex(handle);
-        } catch (err) {
-            if ((err as Error).name !== 'AbortError') {
-                console.error('Error:', err);
-            }
-        }
-    }, [refreshFiles, openDailyNote]);
-
-    // Load saved folder on mount
-    useEffect(() => {
-        const loadSavedFolder = async () => {
-            try {
-                const db = await new Promise<IDBDatabase>((resolve, reject) => {
-                    const request = window.indexedDB.open('ThinkDuckDB', 1);
-                    request.onupgradeneeded = () => {
-                        request.result.createObjectStore('folders');
-                    };
-                    request.onsuccess = () => resolve(request.result);
-                    request.onerror = () => reject(request.error);
-                });
-
-                const handle = await new Promise<FileSystemDirectoryHandle | null>((resolve) => {
-                    const tx = db.transaction('folders', 'readonly');
-                    const request = tx.objectStore('folders').get('lastFolder');
-                    request.onsuccess = () => resolve(request.result || null);
-                    request.onerror = () => resolve(null);
-                });
-
-                if (handle) {
-                    // Verify we still have permission
-                    const permission = await handle.queryPermission({ mode: 'readwrite' });
-                    if (permission === 'granted') {
-                        setRootHandle(handle);
-                        setFolderName(handle.name);
-                        const loadedFiles = await refreshFiles(handle);
-
-                        // Check for hash in URL to open specific note
-                        const hash = window.location.hash.slice(1);
-                        if (hash) {
-                            const decodedHash = decodeURIComponent(hash);
-                            const targetFile = loadedFiles.find(f =>
-                                f.name === decodedHash ||
-                                f.name === `${decodedHash}.json` ||
-                                f.name.replace('.json', '') === decodedHash
-                            );
-
-                            if (targetFile) {
-                                setCurrentFile(targetFile);
-                                console.log('[Auto] Opened from hash:', targetFile.name);
-                            } else {
-                                await openDailyNote(handle);
-                            }
-                        } else {
-                            await openDailyNote(handle);
-                        }
-
-                        // Build search index for auto-loaded folder
-                        buildIndex(handle);
-                    } else {
-                        console.log('[Auto] Permission not granted, folder cleared');
-                    }
-                }
-            } catch (err) {
-                console.error('[Auto] Error loading saved folder:', err);
-            }
-        };
-
-        loadSavedFolder();
-    }, [refreshFiles, openDailyNote]);
-
-    const selectFile = useCallback((file: FileNode) => {
-        setCurrentFile(file);
-    }, []);
-
-    const saveFile = useCallback(async (content: string) => {
-        if (!currentFile) return;
-        try {
-            const writable = await currentFile.handle.createWritable();
-            await writable.write(content);
-            await writable.close();
-
-            // Update search index
-            updateFile(currentFile.name);
-
-            // Update files list with new lastModified to trigger sidebar preview update
-            setFiles(prev => prev.map(f => {
-                if (f.name === currentFile.name) {
-                    return { ...f, lastModified: Date.now() };
-                }
-                return f;
-            }).sort((a, b) => b.lastModified - a.lastModified)); // Re-sort if needed, though this will jump items around
-        } catch (err) {
-            console.error('[saveFile] Error:', err);
-        }
-    }, [currentFile, updateFile]);
-
-    const createNewNote = useCallback(async (filename: string, shouldSetActive: boolean = true) => {
-        if (!rootHandle) {
-            alert('Please open a folder first');
-            return;
-        }
-        try {
-            const name = filename.endsWith('.json') ? filename : `${filename}.json`;
-            const fileHandle = await rootHandle.getFileHandle(name, { create: true });
-
-            const file = await fileHandle.getFile();
-            if (file.size === 0) {
-                const writable = await fileHandle.createWritable();
-                await writable.write('');
-                await writable.close();
-            }
-
-            const updatedFiles = await refreshFiles(rootHandle);
-
-            // Index the new file
-            updateFile(name);
-
-            if (shouldSetActive) {
-                // Find the new file object from the updated list to ensure correct reference
-                const newFileNode = updatedFiles.find(f => f.name === name);
-                if (newFileNode) {
-                    setCurrentFile(newFileNode);
-                }
-            }
-        } catch (err) {
-            console.error('[createNewNote] Error:', err);
-            alert('Error creating note: ' + (err as Error).message);
-        }
-    }, [rootHandle, refreshFiles, updateFile]);
-
-    // Global Keyboard Shortcut for New Note (Ctrl/Cmd+N)
-    // Placed here to ensure access to 'files' state and 'createNewNote' function
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            // Check for Ctrl/Cmd + N
-            const isCtrlOrCmd = e.ctrlKey || e.metaKey;
-            const isN = e.key.toLowerCase() === 'n';
-
-            if (isCtrlOrCmd && isN) {
-                // Handle Shift+Ctrl+N (New Window/Tab)
-                if (e.shiftKey) {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    const newNoteName = getNextQuackNoteName(files);
-
-                    // Create note WITHOUT switching to it
-                    createNewNote(newNoteName, false);
-
-                    // Open in new window using defined format
-                    openNoteInPopup(newNoteName);
-                    return;
-                }
-
-                // Handle Ctrl+N (Current Window)
-                // Critical: Stop browser from opening new window
-                e.preventDefault();
-                e.stopPropagation();
-
-                const newNoteName = getNextQuackNoteName(files);
-                createNewNote(newNoteName);
-            }
-        };
-
-        // Attach to window with capture: true to intercept before browser
-        window.addEventListener('keydown', handleKeyDown, { capture: true });
-        return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-    }, [files, createNewNote]);
-
-    const renameFile = useCallback(async (oldName: string, newName: string) => {
-        if (!rootHandle || !currentFile) return;
-        try {
-            const oldFileName = oldName.endsWith('.json') ? oldName : `${oldName}.json`;
-            const newFileName = newName.endsWith('.json') ? newName : `${newName}.json`;
-
-            if (oldFileName === newFileName) return;
-
-            // Read content from old file
-            const oldFile = await currentFile.handle.getFile();
-            const content = await oldFile.text();
-
-            // Create new file with new name
-            const newHandle = await rootHandle.getFileHandle(newFileName, { create: true });
-            const writable = await newHandle.createWritable();
-            await writable.write(content);
-            await writable.close();
-
-            // Delete old file
-            await rootHandle.removeEntry(oldFileName);
-
-            // Update state
-            await refreshFiles(rootHandle);
-            setCurrentFile({ name: newFileName, handle: newHandle, lastModified: Date.now() });
-
-            // Update index
-            removeFile(oldFileName);
-            updateFile(newFileName);
-
-            console.log('[renameFile] Success:', oldFileName, '->', newFileName);
-        } catch (err) {
-            console.error('[renameFile] Error:', err);
-            alert('Error renaming file: ' + (err as Error).message);
-        }
-    }, [rootHandle, currentFile, refreshFiles, removeFile, updateFile]);
-
-    const deleteFile = useCallback(async (filename: string) => {
-        if (!rootHandle) return;
-
-        try {
-            await rootHandle.removeEntry(filename);
-            await refreshFiles(rootHandle);
-
-            if (currentFile?.name === filename) {
-                setCurrentFile(null);
-            }
-            console.log('[deleteFile] Success:', filename);
-
-            // Update index
-            removeFile(filename);
-
-            syncChannel.current?.postMessage({ type: 'DELETE_FILE', filename });
-        } catch (err) {
-            console.error('[deleteFile] Error:', err);
-            alert('Error deleting file: ' + (err as Error).message);
-        }
-    }, [rootHandle, refreshFiles, currentFile, removeFile]);
-
-    const restoreFile = useCallback((filename: string) => {
-        syncChannel.current?.postMessage({ type: 'RESTORE_FILE', filename });
-        if (rootHandle) refreshFiles(rootHandle);
-    }, [rootHandle, refreshFiles]);
-
-    const openDailyNoteManually = useCallback(async () => {
-        if (!rootHandle) {
-            alert('Please open a folder first');
-            return;
-        }
-        await openDailyNote(rootHandle);
-    }, [rootHandle, openDailyNote]);
-
-    const openDateNote = useCallback(async (dateString: string) => {
-        if (!rootHandle) {
-            alert('Please open a folder first');
-            return;
-        }
-        try {
-            // dateString is YYYY-MM-DD from calendar
-            const date = new Date(dateString);
-            const dailyNoteName = `${format(date, 'MMMM do, yyyy')}.json`;
-            const fileHandle = await rootHandle.getFileHandle(dailyNoteName, { create: true });
-            const file = await fileHandle.getFile();
-            if (file.size === 0) {
-                const writable = await fileHandle.createWritable();
-                await writable.write('');
-                await writable.close();
-            }
-            await refreshFiles(rootHandle);
-            setCurrentFile({ name: dailyNoteName, handle: fileHandle, lastModified: Date.now() });
-            console.log('[openDateNote] Opened:', dailyNoteName);
-        } catch (err) {
-            console.error('[openDateNote] Error:', err);
-        }
-    }, [rootHandle, refreshFiles]);
-
-    return (
-        <FileSystemContext.Provider value={{ folderName, files, currentFile, rootHandle, openDirectory, selectFile, saveFile, createNewNote, renameFile, deleteFile, restoreFile, openDailyNoteManually, openDateNote, search: searchAsync }}>
-            {children}
-        </FileSystemContext.Provider>
-    );
-}
-
-function useFileSystem() {
-    const context = useContext(FileSystemContext);
-    if (!context) throw new Error('useFileSystem must be used within FileSystemProvider');
-    return context;
-}
+// Editor Component starts here
 
 // JSON-based Tiptap Editor Component
 function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemFileHandle; onSave: (content: string) => void; onEditorReady?: (editor: any) => void }) {
@@ -439,7 +56,7 @@ function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemF
     const [initialContent, setInitialContent] = useState<any>(null);
     const saveTimeoutRef = useRef<any>(null);
     const editorRef = useRef<any>(null);
-    const { files, selectFile, search } = useFileSystem();
+    const { files, selectFile, createNewNote } = useFileSystem();
 
     // Load JSON from file
     useEffect(() => {
@@ -454,6 +71,62 @@ function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemF
                     if (text.trim()) {
                         try {
                             const json = JSON.parse(text);
+
+                            // Process JSON to convert [[text]] to backlink nodes
+                            const processContent = (nodes: any[]): any[] => {
+                                return nodes.map(node => {
+                                    if (node.type === 'text' && node.text) {
+                                        // Regex to find [[text]]
+                                        const regex = /\[\[([^\]]+)\]\]/g;
+                                        const parts = [];
+                                        let lastIndex = 0;
+                                        let match;
+
+                                        while ((match = regex.exec(node.text)) !== null) {
+                                            // Add preceding text
+                                            if (match.index > lastIndex) {
+                                                parts.push({
+                                                    type: 'text',
+                                                    text: node.text.substring(lastIndex, match.index)
+                                                });
+                                            }
+
+                                            // Add backlink node
+                                            parts.push({
+                                                type: 'backlink',
+                                                attrs: {
+                                                    label: match[1],
+                                                    pageId: match[1],
+                                                    type: 'page'
+                                                }
+                                            });
+
+                                            lastIndex = regex.lastIndex;
+                                        }
+
+                                        // Add remaining text
+                                        if (lastIndex < node.text.length) {
+                                            parts.push({
+                                                type: 'text',
+                                                text: node.text.substring(lastIndex)
+                                            });
+                                        }
+
+                                        return parts.length > 0 ? parts : [node];
+                                    }
+
+                                    if (node.content) {
+                                        return { ...node, content: processContent(node.content) };
+                                    }
+
+                                    return node;
+                                }).flat();
+                            };
+
+                            if (json.content) {
+                                json.content = processContent(json.content);
+                            }
+
                             setInitialContent(json);
                         } catch (e) {
                             console.error('[Editor] Invalid JSON, starting fresh');
@@ -535,75 +208,112 @@ function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemF
             SlashCommandExtension.configure({
                 suggestion: SlashCommandOptions,
             }),
-            Backlink.configure({
+            Backlink.extend({
+                addNodeView() {
+                    return ReactNodeViewRenderer(BacklinkNode);
+                },
+            }).configure({
                 HTMLAttributes: {
                     class: 'backlink',
                 },
                 renderLabel({ node }) {
                     return `[[${node.attrs.label || ''}]]`;
                 },
-                onNavigate: (pageId: string) => {
-                    const targetFile = files.find(f => f.name === `${pageId}.json`);
+                onNavigate: async (pageId: string) => {
+                    const targetFile = files.find(f => f.name === `${pageId}.json` || f.name === pageId);
+
                     if (targetFile) {
                         selectFile(targetFile);
                     } else {
-                        console.warn(`Backlink target not found: ${pageId}`);
+                        // Lazy creation: Create file if it doesn't exist
+                        console.log(`[Backlink] Lazy creating note: ${pageId}`);
+                        await createNewNote(pageId);
+                        // createNewNote automatically sets the current file if successful
                     }
                 },
                 suggestion: {
                     char: '[',
                     allowSpaces: true,
-                    command: ({ editor, range, props }) => {
-                        const item = props as any;
-                        const nodeAttrs = {
-                            id: item.id,
-                            label: item.type === 'block' && item.fullContent ? item.fullContent : item.title,
-                            type: item.type,
-                            pageId: item.pageId,
-                        };
+                    command: async ({ editor, range, props }: { editor: any, range: any, props: any }) => {
+                        const item = props as SearchableItem;
 
-                        // Check for trailing `]` or `]]` to prevent duplication (e.g. from auto-close)
-                        const { state } = editor;
-                        const { doc } = state;
-                        let deleteTo = range.to;
+                        // Immediate creation for both phantom and create-new
+                        if (item.type === 'phantom' && item.pageId) {
+                            await createNewNote(item.pageId, false);
+                        } else if (item.type === 'create-new' && item.query) {
+                            await createNewNote(item.query, false);
+                        }
 
-                        // Check next 2 chars safely
-                        try {
-                            // Helper to get text without error if out of bounds
-                            const nextTwo = doc.textBetween(range.to, Math.min(range.to + 2, doc.content.size), '\n', ' ');
-                            if (nextTwo === ']]') {
-                                deleteTo += 2;
-                            } else if (nextTwo.startsWith(']')) {
-                                deleteTo += 1;
+                        const label = item.type === 'create-new' ? item.query : (item.type === 'phantom' ? item.pageId : item.title);
+                        const pageId = item.type === 'create-new' ? item.query : item.pageId;
+
+                        // Check for trailing ']' or ']]' after the range
+                        // The range covers the trigger '[' and the query
+                        let to = range.to;
+                        const doc = editor.state.doc;
+                        const nextChar = doc.textBetween(to, Math.min(to + 1, doc.content.size));
+                        if (nextChar === ']') {
+                            to += 1;
+                            const nextNextChar = doc.textBetween(to, Math.min(to + 1, doc.content.size));
+                            if (nextNextChar === ']') {
+                                to += 1;
                             }
-                        } catch (e) {
-                            // Ignore range errors
                         }
 
                         editor
                             .chain()
                             .focus()
-                            .insertContentAt({ from: range.from, to: deleteTo }, [
-                                { type: 'backlink', attrs: nodeAttrs },
-                                { type: 'text', text: ' ' },
+                            .insertContentAt({ from: range.from, to: to }, [
+                                {
+                                    type: 'backlink',
+                                    attrs: {
+                                        id: item.type === 'block' ? item.id : undefined,
+                                        label: label,
+                                        type: item.type === 'block' ? 'block' : 'page',
+                                        pageId: pageId,
+                                    },
+                                },
+                                {
+                                    type: 'text',
+                                    text: ' ',
+                                },
                             ])
                             .run();
                     },
-                    items: async ({ query }) => {
-                        // Logic to handle [[ trigger
-                        // 1. Force close if query contains closing brackets
-                        if (query.includes(']')) {
-                            return [];
-                        }
-
-                        // 2. Only trigger if we have the second bracket (start of sequence)
-                        if (query.length === 0 && query !== '[') {
-                            // partial match logic if needed
-                        }
-
+                    items: ({ query }: { query: string }) => {
                         if (query.startsWith('[')) {
+                            // Close if query contains a closing bracket (end of backlink)
+                            if (query.includes(']')) {
+                                return [];
+                            }
+
                             const realQuery = query.substring(1);
-                            return search(realQuery);
+                            const results = searchItems(realQuery);
+
+                            // 1. If query is empty, return empty array (don't show recent files to avoid trapping Enter)
+                            if (!realQuery.trim()) {
+                                return [];
+                            }
+
+                            // 2. Check if exact match exists
+                            const exactMatch = results.find(r => r.title.toLowerCase() === realQuery.toLowerCase() && r.type === 'page');
+
+                            if (exactMatch) {
+                                return results;
+                            } else {
+                                // 3. Prepend "Create new" option if query is valid
+                                return [
+                                    {
+                                        type: 'create-new',
+                                        id: `create-${realQuery}`,
+                                        title: realQuery,
+                                        pageName: '',
+                                        lastModified: Date.now(),
+                                        query: realQuery
+                                    } as any,
+                                    ...results
+                                ];
+                            }
                         }
                         return [];
                     },
@@ -780,6 +490,44 @@ function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemF
             editor?.destroy();
         };
     }, [editor]);
+
+    // Keyboard shortcuts for New Note
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Check for Ctrl/Cmd + N
+            const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+            const isN = e.key.toLowerCase() === 'n';
+
+            if (isCtrlOrCmd && isN) {
+                // Handle Shift+Ctrl+N (New Window/Tab)
+                if (e.shiftKey) {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    const newNoteName = getNextQuackNoteName(files);
+
+                    // Create note WITHOUT switching to it
+                    createNewNote(newNoteName, false);
+
+                    // Open in new window using defined format
+                    openNoteInPopup(newNoteName);
+                    return;
+                }
+
+                // Handle Ctrl+N (Current Window)
+                // Critical: Stop browser from opening new window
+                e.preventDefault();
+                e.stopPropagation();
+
+                const newNoteName = getNextQuackNoteName(files);
+                createNewNote(newNoteName);
+            }
+        };
+
+        // Attach to window with capture: true to intercept before browser
+        window.addEventListener('keydown', handleKeyDown, { capture: true });
+        return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+    }, [files, createNewNote]);
 
     if (isLoading) {
         return <div style={{ padding: '20px' }}>Loading...</div>;
@@ -1480,6 +1228,7 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
     const [showCalendar, setShowCalendar] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null);
+    const titleInputRef = useRef<HTMLInputElement>(null);
 
     // Existing Note Dates for Calendar
     const existingNoteDates = files
@@ -1510,7 +1259,34 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
 
     const handleTitleClick = () => {
         setIsEditingTitle(true);
+        setTimeout(() => {
+            titleInputRef.current?.focus();
+            titleInputRef.current?.select();
+        }, 0);
     };
+
+    const handleSave = useCallback(async (content: string) => {
+        if (currentFile) {
+            // content is stringified JSON from Editor? No, Editor passes string? 
+            // Editor onSave typically passed the content.
+            // Let's check Editor definition.
+            // step 364: function Editor({ ... onSave: (content: string) => void ...
+            // And inside Editor: onSave(JSON.stringify(json));
+            // So content IS stringified JSON.
+            // Context saveFile takes (handle, content: any).
+            // Context.saveFile stringifies if needed?
+            // FileSystemContext.tsx: await writable.write(JSON.stringify(content, null, 2));
+            // So saveFile expects OBJECT.
+            // Editor passes STRING.
+            // So handleSave must PARSE string -> object.
+            try {
+                await saveFile(currentFile.handle, JSON.parse(content));
+            } catch (e) {
+                console.error("Error saving parsing JSON", e);
+            }
+        }
+    }, [currentFile, saveFile]);
+
 
     const handleTitleBlur = () => {
         setIsEditingTitle(false);
@@ -1767,7 +1543,7 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                         <Editor
                             key={currentFile.name}
                             fileHandle={currentFile.handle}
-                            onSave={saveFile}
+                            onSave={handleSave}
                             onEditorReady={setCurrentEditor}
                         />
 
@@ -1788,7 +1564,7 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
     );
 }
 
-import { BrowserNotSupported } from './components/BrowserNotSupported';
+
 
 export default function App() {
     // Check for browser support
@@ -1831,6 +1607,8 @@ export default function App() {
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
+
+
 
     const toggleSidebar = () => {
         setIsSidebarOpen(prev => !prev);

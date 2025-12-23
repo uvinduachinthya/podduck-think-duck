@@ -2,6 +2,7 @@
     /* Primary Color - Will be set dynamically by ThemeContext */
     --primary-color: #4F65F2;
     --primary-hover: #3E52CE;
+    --primary-faded: rgba(79, 101, 242, 0.5);
 
     /* Sidebar (Dark) */
     --sidebar-bg: #202020;

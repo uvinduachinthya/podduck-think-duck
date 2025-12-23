@@ -1,29 +1,51 @@
 // Search index for backlinking - in-memory storage for fast lookups
 
 export interface SearchableItem {
-    type: 'page' | 'block';
+    type: 'page' | 'block' | 'create-new' | 'phantom';
     id: string;
     title: string; // page name or block text
     fullContent?: string; // full block text (for blocks only)
-    pageName: string; // which page this belongs to
-    pageId: string; // page filename without extension
+    pageName?: string; // which page this belongs to
+    pageId?: string; // page filename without extension
     blockPath?: string[]; // path to block within page (array of IDs)
-    lastModified: number; // for recency sorting
+    lastModified?: number; // for recency sorting
+    query?: string; // for create-new
 }
 
 // Global in-memory index
 let searchIndex: SearchableItem[] = [];
 
 /**
- * Parse TipTap JSON structure to extract blocks
+ * Parse TipTap JSON structure to extract blocks and found backlinks
  * TipTap stores content as: doc > bulletList > listItem > paragraph
  */
-function parseTipTapBlocks(tiptapDoc: any, pageName: string, pageId: string, lastModified: number): SearchableItem[] {
+function parseTipTapBlocks(
+    tiptapDoc: any,
+    pageName: string,
+    pageId: string,
+    lastModified: number,
+    foundBacklinks: Set<string>
+): SearchableItem[] {
     const items: SearchableItem[] = [];
 
     if (!tiptapDoc || !tiptapDoc.content) return items;
 
-    // Find bulletList nodes
+    // Recursive helper to traverse nodes and collect backlinks
+    const scanForBacklinks = (nodes: any[]) => {
+        for (const node of nodes) {
+            if (node.type === 'backlink' && node.attrs && node.attrs.pageId) {
+                foundBacklinks.add(node.attrs.pageId);
+            }
+            if (node.content) {
+                scanForBacklinks(node.content);
+            }
+        }
+    };
+
+    // Initial scan for ALL backlinks in the doc, regardless of structure
+    scanForBacklinks(tiptapDoc.content);
+
+    // Find bulletList nodes for Block Indexing
     for (const node of tiptapDoc.content) {
         if (node.type === 'bulletList' && node.content) {
             // Process each listItem as a block
@@ -72,6 +94,9 @@ export async function buildSearchIndex(directoryHandle: FileSystemDirectoryHandl
     const startTime = performance.now();
     searchIndex = [];
 
+    const existingPages = new Set<string>();
+    const foundBacklinks = new Set<string>();
+
     try {
         let totalPages = 0;
         let totalBlocks = 0;
@@ -89,6 +114,8 @@ export async function buildSearchIndex(directoryHandle: FileSystemDirectoryHandl
                     const pageId = entry.name.replace('.json', '');
                     const pageName = pageId;
 
+                    existingPages.add(pageId);
+
                     // Add page itself as searchable item
                     searchIndex.push({
                         type: 'page',
@@ -101,12 +128,28 @@ export async function buildSearchIndex(directoryHandle: FileSystemDirectoryHandl
                     totalPages++;
 
                     // Index all blocks using TipTap parser
-                    const blockItems = parseTipTapBlocks(data, pageName, pageId, lastModified);
+                    const blockItems = parseTipTapBlocks(data, pageName, pageId, lastModified, foundBacklinks);
                     searchIndex.push(...blockItems);
                     totalBlocks += blockItems.length;
                 } catch (err) {
                     console.warn(`Failed to index ${entry.name}:`, err);
                 }
+            }
+        }
+
+        // Process collected backlinks to find phantoms
+        for (const linkId of foundBacklinks) {
+            if (!existingPages.has(linkId)) {
+                // Determine if we already have this phantom (unlikely in fresh build, but safe check)
+                // Actually searchIndex is strictly pages and blocks so far.
+                searchIndex.push({
+                    type: 'phantom',
+                    id: `phantom-${linkId}`,
+                    title: linkId,
+                    pageId: linkId,
+                    pageName: 'Phantom Note',
+                    lastModified: Date.now() // Treat as fresh
+                });
             }
         }
 
@@ -130,8 +173,12 @@ export async function updateIndexForFile(
 ): Promise<void> {
     const pageId = fileName.replace('.json', '');
 
-    // Remove existing entries for this page
-    searchIndex = searchIndex.filter(item => item.pageId !== pageId);
+    // Remove existing entries for this page (page and blocks)
+    // Also remove any 'phantom' entry that matches this pageId (since it's becoming real)
+    searchIndex = searchIndex.filter(item => {
+        if (item.type === 'phantom' && item.pageId === pageId) return false;
+        return item.pageId !== pageId;
+    });
 
     try {
         const fileHandle = await directoryHandle.getFileHandle(fileName);
@@ -141,6 +188,7 @@ export async function updateIndexForFile(
         const lastModified = file.lastModified;
 
         const pageName = pageId;
+        const foundBacklinks = new Set<string>();
 
         // Re-add page
         searchIndex.push({
@@ -153,8 +201,30 @@ export async function updateIndexForFile(
         });
 
         // Re-index blocks using TipTap parser
-        const blockItems = parseTipTapBlocks(data, pageName, pageId, lastModified);
+        const blockItems = parseTipTapBlocks(data, pageName, pageId, lastModified, foundBacklinks);
         searchIndex.push(...blockItems);
+
+        // Process found backlinks to potentially add phantoms
+        // Note: we don't have global visibility here, so we check against current searchIndex
+        for (const linkId of foundBacklinks) {
+            const exists = searchIndex.some(item =>
+                (item.type === 'page' && item.pageId === linkId) ||
+                (item.type === 'phantom' && item.pageId === linkId)
+            );
+
+            if (!exists) {
+                // Double check if it's REALLY not a page (in case searchIndex lookup missed it?)
+                // Assuming searchIndex is source of truth.
+                searchIndex.push({
+                    type: 'phantom',
+                    id: `phantom-${linkId}`,
+                    title: linkId,
+                    pageId: linkId,
+                    pageName: 'Phantom Note',
+                    lastModified: Date.now()
+                });
+            }
+        }
 
         console.log(`Updated index for ${fileName}`);
     } catch (err) {
@@ -200,7 +270,7 @@ export function searchItems(query: string): SearchableItem[] {
     if (!query || query.length === 0) {
         // Return all items sorted by recency
         return [...searchIndex]
-            .sort((a, b) => b.lastModified - a.lastModified)
+            .sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0))
             .slice(0, 50); // Limit to 50 results
     }
 
@@ -215,7 +285,7 @@ export function searchItems(query: string): SearchableItem[] {
     // Sort by score (desc), then by lastModified (desc)
     matches.sort((a, b) => {
         if (a.score !== b.score) return b.score - a.score;
-        return b.item.lastModified - a.item.lastModified;
+        return (b.item.lastModified || 0) - (a.item.lastModified || 0);
     });
 
     // Return top 50 results

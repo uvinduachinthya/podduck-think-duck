@@ -1,4 +1,4 @@
-import { Node, mergeAttributes } from '@tiptap/core';
+import { Node, mergeAttributes, InputRule, PasteRule } from '@tiptap/core';
 import { ReactRenderer } from '@tiptap/react';
 import Suggestion, { type SuggestionOptions } from '@tiptap/suggestion';
 import { BacklinkSuggestions, type BacklinkSuggestionsHandle } from '../../components/BacklinkSuggestions';
@@ -204,6 +204,49 @@ export const Backlink = Node.create<BacklinkOptions>({
             {
                 tag: 'span[data-backlink]',
             },
+        ];
+    },
+
+    addInputRules() {
+        return [
+            new InputRule({
+                // Match [[text]] where text is not empty and not just whitespace
+                find: /\[\[(?!\s+\]\])([^\]]+)\]\]$/,
+                handler: ({ state, range, match }) => {
+                    const { tr } = state;
+                    const start = range.from;
+                    const end = range.to;
+                    const label = match[1];
+
+                    if (label) {
+                        tr.replaceWith(start, end, this.type.create({
+                            label,
+                            pageId: label,
+                            type: 'page'
+                        }));
+                    }
+                }
+            })
+        ]
+    },
+
+    addPasteRules() {
+        return [
+            new PasteRule({
+                find: /\[\[([^\]]+)\]\]/g,
+                handler: ({ state, range, match }: { state: any, range: any, match: RegExpMatchArray }) => {
+                    const { tr } = state;
+                    const matchLabel = match[1];
+
+                    if (matchLabel) {
+                        tr.replaceWith(range.from, range.to, this.type.create({
+                            label: matchLabel,
+                            pageId: matchLabel,
+                            type: 'page',
+                        }));
+                    }
+                },
+            }),
         ];
     },
 

@@ -63,7 +63,7 @@ export function SearchModal({ isOpen, onClose, onNavigate, search }: SearchModal
             e.preventDefault();
             if (results[selectedIndex]) {
                 const item = results[selectedIndex];
-                onNavigate(item.pageId, item.type === 'block' ? item.id : undefined);
+                onNavigate(item.pageId || '', item.type === 'block' ? item.id : undefined);
                 onClose();
             }
         } else if (e.key === 'Escape') {
@@ -163,7 +163,7 @@ export function SearchModal({ isOpen, onClose, onNavigate, search }: SearchModal
                             <div
                                 key={`${item.type}-${item.id}`}
                                 onClick={() => {
-                                    onNavigate(item.pageId, item.type === 'block' ? item.id : undefined);
+                                    onNavigate(item.pageId || '', item.type === 'block' ? item.id : undefined);
                                     onClose();
                                 }}
                                 onMouseOver={() => setSelectedIndex(index)}

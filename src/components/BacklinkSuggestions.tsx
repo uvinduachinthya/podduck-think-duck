@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
-import { FileText, Hash } from 'lucide-react';
+import { FileText, Hash, FilePlus, FileQuestion } from 'lucide-react';
 import type { SearchableItem } from '../utils/searchIndex';
 
 export interface BacklinkSuggestionsProps {
@@ -106,11 +106,15 @@ export const BacklinkSuggestions = forwardRef<BacklinkSuggestionsHandle, Backlin
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     flexShrink: 0,
-                                    color: item.type === 'page' ? 'var(--primary-color)' : 'var(--text-secondary)',
+                                    color: (item.type === 'page' || item.type === 'create-new' || item.type === 'phantom') ? ((item.type === 'create-new' || item.type === 'phantom') ? 'var(--primary-faded)' : 'var(--primary-color)') : 'var(--text-secondary)',
                                 }}
                             >
                                 {item.type === 'page' ? (
                                     <FileText size={18} />
+                                ) : item.type === 'create-new' ? (
+                                    <FilePlus size={18} />
+                                ) : item.type === 'phantom' ? (
+                                    <FileQuestion size={18} />
                                 ) : (
                                     <Hash size={16} />
                                 )}
@@ -125,7 +129,8 @@ export const BacklinkSuggestions = forwardRef<BacklinkSuggestionsHandle, Backlin
                             >
                                 <div
                                     style={{
-                                        fontWeight: item.type === 'page' ? 500 : 400,
+                                        fontWeight: (item.type === 'page' || item.type === 'create-new' || item.type === 'phantom') ? 500 : 400,
+                                        color: (item.type === 'create-new' || item.type === 'phantom') ? 'var(--primary-faded)' : 'inherit',
                                         overflow: 'hidden',
                                         textOverflow: 'ellipsis',
                                         whiteSpace: 'nowrap',

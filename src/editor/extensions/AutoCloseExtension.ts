@@ -36,7 +36,7 @@ export const AutoCloseExtension = Extension.create({
                             const newPos = state.doc.resolve(from + 1);
                             dispatch(
                                 state.tr.setSelection(
-                                    state.selection.constructor.near(newPos)
+                                    (state.selection.constructor as any).near(newPos)
                                 )
                             );
                             return true;
@@ -85,9 +85,9 @@ export const AutoCloseExtension = Extension.create({
                             tr.insertText(text + closing, from, to);
 
                             // Move cursor back by 1 (between pairs)
-                            const cursorSpace = 1; // length of closing
+                            // Move cursor back by 1 (between pairs)
                             const newPos = tr.doc.resolve(from + text.length);
-                            tr.setSelection(state.selection.constructor.near(newPos));
+                            tr.setSelection((state.selection.constructor as any).near(newPos));
 
                             dispatch(tr);
                             return true;

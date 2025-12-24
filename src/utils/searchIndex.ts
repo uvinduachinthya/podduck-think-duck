@@ -165,6 +165,17 @@ export async function buildSearchIndex(directoryHandle: FileSystemDirectoryHandl
 }
 
 /**
+ * Remove a page and its blocks from the index
+ */
+export function removePageFromIndex(pageId: string): void {
+    searchIndex = searchIndex.filter(item => {
+        if (item.type === 'phantom' && item.pageId === pageId) return true; // Keep phantoms if they exist (though usually they wouldn't if page existed)
+        return item.pageId !== pageId;
+    });
+    console.log(`Removed ${pageId} from index`);
+}
+
+/**
  * Update index for a specific file (incremental update)
  */
 export async function updateIndexForFile(

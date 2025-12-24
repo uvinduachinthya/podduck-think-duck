@@ -1007,7 +1007,7 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
             return "This name already exists";
         }
 
-        await renameFile(editingFileId, cleanName);
+        await renameFile(editingFileId, newFileName);
         cancelRename();
     };
 

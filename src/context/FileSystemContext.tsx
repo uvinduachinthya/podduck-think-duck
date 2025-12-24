@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { useSearchWorker, type SearchResult } from '../hooks/useSearchWorker';
-import { buildSearchIndex, updateIndexForFile } from '../utils/searchIndex';
+import { buildSearchIndex, updateIndexForFile, removePageFromIndex } from '../utils/searchIndex';
 
 // File Types
 export interface FileNode {
@@ -58,11 +58,11 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
         const sorted = fileList.sort((a, b) => b.lastModified - a.lastModified);
         setFiles(sorted);
 
-        // Rebuild index (Worker)
+        // Rebuild index (Worker) - Worker handles its own performance, usually fine
         buildIndex(handle);
 
-        // Rebuild index (Main Thread - for synchronous access and Phantoms)
-        buildSearchIndex(handle).catch(err => console.error("Failed to build main thread search index:", err));
+        // REMOVED: Rebuild index (Main Thread)
+        // buildSearchIndex(handle).catch(err => console.error("Failed to build main thread search index:", err));
 
         return sorted;
     }, [buildIndex]);
@@ -78,6 +78,7 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
             if (rootHandle) {
                 if (type === 'DELETE_FILE' || type === 'RESTORE_FILE') {
                     refreshFiles(rootHandle);
+                    // TODO: Sync search index too if needed across tabs
                 }
             }
         };
@@ -102,6 +103,10 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
             }
             await refreshFiles(handle);
             setCurrentFile({ name: dailyNoteName, handle: fileHandle, lastModified: Date.now() });
+
+            // Update search index for daily note
+            updateIndexForFile(handle, dailyNoteName);
+
             console.log('[Auto] Opened daily note:', dailyNoteName);
         } catch (err) {
             console.error('[Auto] Error with daily note:', err);
@@ -126,6 +131,10 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
             };
 
             await refreshFiles(handle);
+
+            // Build search index initially
+            buildSearchIndex(handle).catch(console.error);
+
             await openDailyNote(handle);
 
         } catch (err) {
@@ -155,6 +164,8 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
                             setRootHandle(handle);
                             setFolderName(handle.name);
                             await refreshFiles(handle);
+                            // Build search index initially
+                            buildSearchIndex(handle).catch(console.error);
                             await openDailyNote(handle);
                         } else {
                             // Permission check often fails if not triggered by user, 
@@ -167,6 +178,8 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
                             setFolderName(handle.name);
                             try {
                                 await refreshFiles(handle);
+                                // Build search index initially
+                                buildSearchIndex(handle).catch(console.error);
                                 await openDailyNote(handle);
                             } catch (e) {
                                 console.warn("Could not restore handle without permission", e);
@@ -223,29 +236,44 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
                 await writable.close();
             }
 
-            await refreshFiles(rootHandle);
-            const newFile = (await refreshFiles(rootHandle)).find(f => f.name === name);
+            const newFiles = await refreshFiles(rootHandle);
+            const newFile = newFiles.find(f => f.name === name);
             if (newFile && shouldSwitch) {
                 setCurrentFile(newFile);
             }
+
+            // Update search index for new note
+            updateIndexForFile(rootHandle, name);
+
         } catch (err) {
             console.error('Error creating note:', err);
             throw err;
         }
     }, [rootHandle, refreshFiles]);
 
-    const renameFile = useCallback(async (oldName: string, newName: string) => {
+    const renameFile = useCallback(async (oldName: string, newNameStr: string) => {
         if (!rootHandle) return;
+
+        // Ensure new name ends with .json
+        const newName = newNameStr.endsWith('.json') ? newNameStr : `${newNameStr}.json`;
         // Native rename not fully supported in all File System Access API implementations directly on handle?
         // Actually, typically requires move() or copying.
         // Assuming we implement copy + delete for now or if 'move' is available.
         // Chrome 111+ supports move().
         try {
             const oldHandle = await rootHandle.getFileHandle(oldName);
-            // Try move
-            if ((oldHandle as any).move) {
-                await (oldHandle as any).move(newName);
-            } else {
+            // Try move first, fallback to copy/delete
+            let moved = false;
+            try {
+                if ((oldHandle as any).move) {
+                    await (oldHandle as any).move(newName);
+                    moved = true;
+                }
+            } catch (err) {
+                console.warn("Native move failed/not supported, falling back to copy/delete", err);
+            }
+
+            if (!moved) {
                 // Copy content
                 const oldFile = await oldHandle.getFile();
                 const text = await oldFile.text();
@@ -259,13 +287,18 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
             }
 
             removeFile(oldName);
-            await refreshFiles(rootHandle);
+            const newFiles = await refreshFiles(rootHandle);
 
             // If current file was renamed, update it
             if (currentFile?.name === oldName) {
-                const newFile = (await refreshFiles(rootHandle)).find(f => f.name === newName);
+                const newFile = newFiles.find(f => f.name === newName);
                 if (newFile) setCurrentFile(newFile);
             }
+
+            // Update search index: Remove old, add new
+            removePageFromIndex(oldName.replace('.json', ''));
+            updateIndexForFile(rootHandle, newName);
+
         } catch (err) {
             console.error('Error renaming:', err);
             throw err;
@@ -282,6 +315,10 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
             if (currentFile?.name === filename) {
                 setCurrentFile(null);
             }
+
+            // Remove from search index
+            removePageFromIndex(filename.replace('.json', ''));
+
             syncChannel.current?.postMessage({ type: 'DELETE_FILE', filename });
         } catch (err) {
             console.error('[deleteFile] Error:', err);

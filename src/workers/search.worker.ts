@@ -17,57 +17,58 @@ let searchIndex: SearchableItem[] = [];
 let directoryHandle: FileSystemDirectoryHandle | null = null;
 
 /**
- * Parse TipTap JSON structure to extract blocks
+ * Parse Markdown to extract blocks and backlinks
  */
-function parseTipTapBlocks(tiptapDoc: any, pageName: string, pageId: string, lastModified: number): SearchableItem[] {
+function parseMarkdownBlocks(
+    content: string,
+    pageName: string,
+    pageId: string,
+    lastModified: number
+): SearchableItem[] {
     const items: SearchableItem[] = [];
+    if (!content) return items;
 
-    if (!tiptapDoc || !tiptapDoc.content) return items;
+    // Split by lines to find blocks (paragraphs, list items)
+    const lines = content.split('\n');
+    
+    lines.forEach((line, index) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        
+        // Skip headers as blocks (they are pages usually, but could be sections)
+        if (trimmed.startsWith('#')) return;
 
-    // Find bulletList nodes
-    for (const node of tiptapDoc.content) {
-        if (node.type === 'bulletList' && node.content) {
-            // Process each listItem as a block
-            for (const listItem of node.content) {
-                if (listItem.type === 'listItem' && listItem.content) {
-                    // Extract text from paragraph
-                    let text = '';
-                    for (const para of listItem.content) {
-                        if (para.type === 'paragraph' && para.content) {
-                            for (const textNode of para.content) {
-                                if (textNode.type === 'text' && textNode.text) {
-                                    text += textNode.text;
-                                } else if (textNode.type === 'backlink' && textNode.attrs) {
-                                    // Handle backlinks in text
-                                    text += textNode.attrs.label || '';
-                                }
-                            }
-                        }
-                    }
+        // Clean list markers
+        const cleanText = trimmed.replace(/^[-*]\s+/, '').replace(/^\d+\.\s+/, '');
 
-                    // Index this block if it has text
-                    if (text.trim().length > 0) {
-                        const blockId = `block-${Math.random().toString(36).substr(2, 9)}`;
-                        items.push({
-                            type: 'block',
-                            id: blockId,
-                            title: text.trim(),
-                            fullContent: text.trim(),
-                            pageName,
-                            pageId,
-                            lastModified,
-                        });
-                    }
-                }
-            }
+        if (cleanText.length > 0) {
+             // Check for Block ID ^abcdef
+             const blockIdMatch = cleanText.match(/ \^([a-zA-Z0-9]{6})$/);
+             let blockId = `block-${pageId}-${index}`; // Default unstable ID
+             let contentToSave = cleanText;
+
+             if (blockIdMatch) {
+                 blockId = blockIdMatch[1];
+                 contentToSave = cleanText.substring(0, blockIdMatch.index); // Remove ID from display title
+             }
+
+             items.push({
+                 type: 'block',
+                 id: blockId,
+                 title: contentToSave.trim(),
+                 fullContent: cleanText,
+                 pageName,
+                 pageId,
+                 lastModified
+             });
         }
-    }
+    });
 
     return items;
 }
 
 /**
- * Build search index from all JSON files in directory handle
+ * Build search index from all MD files in directory handle
  */
 async function buildSearchIndex(handle: FileSystemDirectoryHandle): Promise<void> {
     const startTime = performance.now();
@@ -81,17 +82,14 @@ async function buildSearchIndex(handle: FileSystemDirectoryHandle): Promise<void
         // Iterate over all files in directory
         // @ts-ignore - FileSystemDirectoryHandle is iterable
         for await (const entry of handle.values()) {
-            if (entry.kind === 'file' && entry.name.endsWith('.json')) {
+            if (entry.kind === 'file' && entry.name.endsWith('.md')) {
                 try {
                     const fileHandle: FileSystemFileHandle = entry;
                     const file = await fileHandle.getFile();
                     const content = await file.text();
-
-                    if (!content.trim()) continue;
-
-                    const data = JSON.parse(content);
+                    
                     const lastModified = file.lastModified;
-                    const pageId = entry.name.replace('.json', '');
+                    const pageId = entry.name.replace('.md', '');
                     const pageName = pageId;
 
                     // Add page itself as searchable item
@@ -105,8 +103,8 @@ async function buildSearchIndex(handle: FileSystemDirectoryHandle): Promise<void
                     });
                     totalPages++;
 
-                    // Index all blocks using TipTap parser
-                    const blockItems = parseTipTapBlocks(data, pageName, pageId, lastModified);
+                    // Index blocks
+                    const blockItems = parseMarkdownBlocks(content, pageName, pageId, lastModified);
                     searchIndex.push(...blockItems);
                     totalBlocks += blockItems.length;
                 } catch (err) {
@@ -136,7 +134,7 @@ async function buildSearchIndex(handle: FileSystemDirectoryHandle): Promise<void
 async function updateIndexForFile(fileName: string): Promise<void> {
     if (!directoryHandle) return;
 
-    const pageId = fileName.replace('.json', '');
+    const pageId = fileName.replace('.md', '');
 
     // Remove existing entries for this page
     searchIndex = searchIndex.filter(item => item.pageId !== pageId);
@@ -146,9 +144,6 @@ async function updateIndexForFile(fileName: string): Promise<void> {
         const file = await fileHandle.getFile();
         const content = await file.text();
 
-        if (!content.trim()) return;
-
-        const data = JSON.parse(content);
         const lastModified = file.lastModified;
         const pageName = pageId;
 
@@ -163,7 +158,7 @@ async function updateIndexForFile(fileName: string): Promise<void> {
         });
 
         // Re-index blocks
-        const blockItems = parseTipTapBlocks(data, pageName, pageId, lastModified);
+        const blockItems = parseMarkdownBlocks(content, pageName, pageId, lastModified);
         searchIndex.push(...blockItems);
 
         console.log(`[Worker] Updated index for ${fileName}`);

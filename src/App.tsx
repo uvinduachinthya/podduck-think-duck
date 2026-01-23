@@ -41,7 +41,7 @@ import { APP_VERSION } from './version';
 
 // Editor Component starts here
 
-function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemFileHandle; onSave: (content: string) => void; onEditorReady?: (editor: any) => void }) {
+function Editor({ fileHandle, onSave, onEditorReady, onNavigate }: { fileHandle: FileSystemFileHandle; onSave: (content: string) => void; onEditorReady?: (editor: any) => void; onNavigate: (target: string) => void }) {
     const [isLoading, setIsLoading] = useState(true);
     const [content, setContent] = useState('');
     const saveTimeoutRef = useRef<any>(null);
@@ -80,8 +80,10 @@ function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemF
     return (
         <CodeMirrorEditor
             content={content}
+            fileName={fileHandle.name}
             onChange={handleChange}
             onEditorReady={onEditorReady}
+            onNavigate={onNavigate}
         />
     );
 }
@@ -750,7 +752,7 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
 
 
 function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, onSearchClick }: { isSidebarOpen: boolean; toggleSidebar: () => void; showSidebarToggle?: boolean; onSearchClick: () => void }) {
-    const { currentFile, saveFile, files, openDateNote, deleteFile, renameFile, openDirectory } = useFileSystem();
+    const { currentFile, saveFile, files, openDateNote, deleteFile, renameFile, openDirectory, selectFile } = useFileSystem();
     const { theme } = useTheme();
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
@@ -810,9 +812,9 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
             // Editor passes STRING.
             // So handleSave must PARSE string -> object.
             try {
-                await saveFile(currentFile.handle, JSON.parse(content));
+                await saveFile(currentFile.handle, content);
             } catch (e) {
-                console.error("Error saving parsing JSON", e);
+                console.error("Error saving file", e);
             }
         }
     }, [currentFile, saveFile]);
@@ -1075,6 +1077,31 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                             fileHandle={currentFile.handle}
                             onSave={handleSave}
                             onEditorReady={setCurrentEditor}
+                            onNavigate={(target) => {
+                                // Target format: "PageName" or "PageName#^blockId"
+                                const [pageName, blockId] = target.split('#');
+                                
+                                // Find the file
+                                const targetFile = files.find(f => f.name === `${pageName}.md` || f.name === pageName);
+                                if (targetFile) {
+                                    selectFile(targetFile);
+                                    // TODO: Scroll to block if blockId exists
+                                    // We might need to pass an initial scroll target to Editor or handle it via event
+                                    if (blockId) {
+                                        // Simple hack: Store pending scroll in session/local storage or context?
+                                        // Or just rely on search/find?
+                                        // For now, opening the page is step 1.
+                                        console.log(`Navigating to ${pageName}, block ${blockId}`);
+                                        // Optionally dispatch a custom event that the new editor instance can pick up?
+                                        // But the new editor instance isn't mounted yet.
+                                        // We can use a ref in App to store "pendingNavigation"
+                                    }
+                                } else {
+                                    // Maybe create if doesn't exist?
+                                    // Or show error
+                                    console.warn("Target file not found:", pageName);
+                                }
+                            }}
                         />
 
                         <SmoothCursor editor={currentEditor} />

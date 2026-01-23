@@ -49,12 +49,21 @@ function parseMarkdownBlocks(
         const cleanText = trimmed.replace(/^[-*]\s+/, '').replace(/^\d+\.\s+/, '');
 
         if (cleanText.length > 0) {
-             const blockId = `block-${pageId}-${index}`;
+             // Check for Block ID ^abcdef
+             const blockIdMatch = cleanText.match(/ \^([a-zA-Z0-9]{6})$/);
+             let blockId = `block-${pageId}-${index}`; // Default unstable ID
+             let contentToSave = cleanText;
+
+             if (blockIdMatch) {
+                 blockId = blockIdMatch[1];
+                 contentToSave = cleanText.substring(0, blockIdMatch.index); // Remove ID from display title
+             }
+
              items.push({
                  type: 'block',
                  id: blockId,
-                 title: cleanText,
-                 fullContent: cleanText,
+                 title: contentToSave.trim(),
+                 fullContent: cleanText, // Keep full content including ID for consistency? Or remove? Let's remove ID from display.
                  pageName,
                  pageId,
                  lastModified

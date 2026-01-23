@@ -1234,19 +1234,16 @@ emoji-picker::-webkit-scrollbar-button {
 }
 
 /* Links */
-.cm-link, .cm-link * {
-    color: #0969da !important; /* GitHub Link Blue */
+.cm-link, .cm-link *, .cm-url, .cm-md-link, .cm-md-link * {
+    color: var(--primary-color) !important; /* Force primary color for all link types and children */
     text-decoration: none;
     cursor: pointer;
     font-weight: 400;
 }
 
-.cm-link:hover {
+.cm-link:hover, .cm-md-link:hover, .cm-url:hover {
     text-decoration: underline;
-}
-
-.cm-url {
-    color: var(--text-tertiary);
+    color: var(--primary-hover) !important;
 }
 
 /* Bullet Points */
@@ -1327,4 +1324,16 @@ emoji-picker::-webkit-scrollbar-button {
      max-width: 100%;
      border-radius: 8px;
      cursor: default;
+}
+
+/* Stable Markdown Link Class */
+.cm-md-link {
+    color: var(--primary-color) !important;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.cm-md-link:hover {
+    text-decoration: underline;
+    color: var(--primary-hover) !important;
 }

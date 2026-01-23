@@ -197,6 +197,33 @@ const markdownDecorationsPlugin = ViewPlugin.fromClass(class {
                              if (nextChar === ' ') decorations.push(Decoration.replace({}).range(node.to, node.to + 1));
                         }
                     }
+                    
+                    // 10. Links and URLs
+                    else if (nodeType === "Link") {
+                         // Apply styling to the whole link range
+                         decorations.push(Decoration.mark({ class: "cm-md-link" }).range(node.from, node.to));
+
+                         const line = state.doc.lineAt(node.from);
+                         const isLineFocused = selectionInfo.from >= line.from && selectionInfo.to <= line.to;
+
+                         if (!isLineFocused) {
+                             // Walk children to find parts to hide
+                             const cursor = node.node.cursor();
+                             if (cursor.firstChild()) {
+                                 do {
+                                     const type = cursor.name;
+                                     // Hide brackets, parentheses, and the URL itself
+                                     if (type === "LinkMark" || type === "URL") {
+                                         decorations.push(Decoration.replace({}).range(cursor.from, cursor.to));
+                                     }
+                                 } while (cursor.nextSibling());
+                             }
+                         }
+                    }
+                    else if (nodeType === "URL") {
+                         // Basic URL auto-links
+                         decorations.push(Decoration.mark({ class: "cm-md-link" }).range(node.from, node.to));
+                    }
                 }
             });
         }
@@ -239,7 +266,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
             mousedown: (event) => {
                  const target = event.target as HTMLElement;
                  // Check if clicked element is a link or has parent
-                 const link = target.closest('.cm-link');
+                 const link = target.closest('.cm-link') || target.closest('.cm-md-link');
                  // Check if it's a left click (button 0)
                  if (link && event.button === 0) {
                      // Check if user wants to EDIT (e.g. holding Alt)
@@ -249,11 +276,32 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                      event.preventDefault(); // Prevent cursor move/focus
                      event.stopPropagation();
                      
-                     const linkText = (link as HTMLElement).innerText; // text is "[[Target]]"
-                     // Strip [[ ]]
-                     const cleanTarget = linkText.replace(/^\[\[/, '').replace(/\]\]$/, '');
-                     if (onNavigate) onNavigate(cleanTarget);
-                     return;
+                     const linkText = (link as HTMLElement).innerText; 
+                     
+                     // 1. WikiLink [[Target]]
+                     if (linkText.startsWith('[[') && linkText.endsWith(']]')) {
+                         const cleanTarget = linkText.replace(/^\[\[/, '').replace(/\]\]$/, '');
+                         if (onNavigate) onNavigate(cleanTarget);
+                         return;
+                     }
+
+                     // 2. Standard Markdown Link [Title](URL)
+                     // The .cm-link decoration covers the [Title](URL) part usually? 
+                     // Or just the URL part if it's .cm-url?
+                     // Actually, usually [Title](URL) is rendered differently defined by decorations.
+                     // But if we clicked .cm-link, let's try to extract URL.
+                     // If it's a URL-like string:
+                     if (linkText.startsWith('http://') || linkText.startsWith('https://')) {
+                         window.open(linkText, '_blank');
+                         return;
+                     }
+                     
+                     // If it's the [Title](URL) pattern in raw markdown:
+                     const match = linkText.match(/\]\((.*?)\)/);
+                     if (match && match[1]) {
+                         window.open(match[1], '_blank');
+                         return;
+                     }
                  }
             }
         }),

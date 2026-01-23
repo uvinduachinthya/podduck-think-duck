@@ -4,13 +4,16 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { EditorView, Decoration, type DecorationSet, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import { RangeSetBuilder } from '@codemirror/state';
-import { syntaxTree } from '@codemirror/language';
+import { syntaxTree, indentUnit } from '@codemirror/language';
+import { EditorState } from '@codemirror/state';
 import { CodeMirrorSmoothCursor } from './CodeMirrorSmoothCursor';
 import { suggestionExtension, type SuggestionEventDetail } from './extensions/SuggestionExtension';
 import { SlashCommandsList, type SlashCommandItem, type SlashCommandsListHandle } from '../SlashCommandsList';
 import { EmojiSuggestions, type EmojiSuggestionsHandle } from '../EmojiSuggestions';
 import { BacklinkSuggestions, type BacklinkSuggestionsHandle } from '../BacklinkSuggestions';
 import { wikiLinkPlugin } from './extensions/WikiLinkPlugin';
+import { bulletListPlugin } from './extensions/BulletListPlugin';
+import { listGuidesPlugin } from './extensions/ListGuidesPlugin';
 import { searchEmojis, type EmojiItem } from '../../utils/emojiData';
 import { searchItems, type SearchableItem } from '../../utils/searchIndex';
 import { List, CheckSquare, Heading1, Heading2, Quote } from 'lucide-react';
@@ -72,6 +75,50 @@ const editorTheme = EditorView.theme({
     },
     ".cm-url": {
         color: "var(--text-tertiary)",
+    },
+    // Bullet Points
+    ".bullet-point": {
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: "1.5em",
+        height: "1.5em",
+        verticalAlign: "middle",
+        cursor: "pointer",
+        color: "var(--primary-color)",
+        marginRight: "4px",
+        borderRadius: "50%",
+        transition: "background-color 0.2s, color 0.2s",
+    },
+    ".bullet-point:hover": {
+         backgroundColor: "rgba(0, 0, 0, 0.05)",
+         color: "var(--primary-hover)",
+    },
+    ".bullet-dot": {
+        width: "6px",
+        height: "6px",
+        backgroundColor: "currentColor",
+        borderRadius: "50%",
+        pointerEvents: "none",
+    },
+    // Indentation Guides
+    ".cm-indent-guide": {
+         display: "inline-block",
+         position: "relative",
+         width: "1.5em", // Match bullet width to align perfectly
+         textAlign: "center", // Center the content (spaces are invisible anyway but for safety)
+         verticalAlign: "middle", // Align with line
+    },
+    ".cm-indent-guide::before": {
+         content: '""',
+         position: "absolute",
+         top: "-0.3em", // Match line-height 1.6 (0.3 + 1 + 0.3 = 1.6)
+         bottom: "-0.3em",
+         left: "50%",
+         borderLeft: "1px solid var(--border-color)",
+         opacity: "0.5",
+         pointerEvents: "none",
+         transform: "translateX(-50%)"
     }
 });
 
@@ -140,6 +187,8 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
         markdown({ base: markdownLanguage, codeLanguages: languages }),
         EditorView.lineWrapping,
         EditorView.contentAttributes.of({ spellcheck: 'true', autocorrect: 'on', autocapitalize: 'on' }),
+        indentUnit.of("    "), // 4 spaces for indentation match standard assumption
+        EditorState.tabSize.of(4),
         editorTheme,
         EditorView.updateListener.of((update) => {
              if (update.docChanged || update.selectionSet || update.viewportChanged || update.focusChanged) {
@@ -171,6 +220,8 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
         }),
         headerPlugin,
         wikiLinkPlugin,
+        bulletListPlugin,
+        listGuidesPlugin,
         suggestionExtension, 
     ], [onNavigate]);
 

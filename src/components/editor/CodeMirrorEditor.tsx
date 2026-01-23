@@ -21,7 +21,7 @@ const editorTheme = EditorView.theme({
         backgroundColor: "var(--bg-primary)",
         color: "var(--text-primary)",
         height: "100%",
-        fontSize: "16px",
+        fontSize: "var(--editor-font-size)",
     },
     "&.cm-focused": {
         outline: "none",
@@ -139,6 +139,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
     const extensions = useMemo(() => [
         markdown({ base: markdownLanguage, codeLanguages: languages }),
         EditorView.lineWrapping,
+        EditorView.contentAttributes.of({ spellcheck: 'true', autocorrect: 'on', autocapitalize: 'on' }),
         editorTheme,
         EditorView.updateListener.of((update) => {
              if (update.docChanged || update.selectionSet || update.viewportChanged || update.focusChanged) {
@@ -501,6 +502,9 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                     foldGutter: false,
                     highlightActiveLine: false,
                 }}
+                spellCheck={true}
+                autoCorrect="on"
+                autoCapitalize="on"
             />
             {renderSuggestions()}
             <CodeMirrorSmoothCursor view={view} />

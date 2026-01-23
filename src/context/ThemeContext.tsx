@@ -95,6 +95,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
             'classic': "'Goudy Bookletter 1911', Georgia, serif",
             'mono': "'Fira Code', monospace",
             'cozy': "'Gaegu', 'Comic Sans MS', cursive",
+            'system': "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
         };
         root.style.setProperty('--font-family', fontMap[fontFamily] || fontMap.default);
 

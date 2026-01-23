@@ -137,6 +137,7 @@ function TypographySection() {
         { name: 'Classic', value: 'classic', family: "'Arbutus Slab', serif" },
         { name: 'Mono', value: 'mono', family: "'Roboto Mono', monospace" },
         { name: 'Cozy', value: 'cozy', family: "'Gaegu', cursive" },
+        { name: 'System', value: 'system', family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" },
     ];
 
     return (

@@ -2,8 +2,8 @@ import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { EditorView, Decoration, type DecorationSet, ViewPlugin, ViewUpdate } from '@codemirror/view';
-import { RangeSetBuilder } from '@codemirror/state';
+import { EditorView, Decoration, type DecorationSet, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
+import { Range } from '@codemirror/state';
 import { syntaxTree, indentUnit } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
 import { CodeMirrorSmoothCursor } from './CodeMirrorSmoothCursor';
@@ -15,7 +15,7 @@ import { wikiLinkPlugin } from './extensions/WikiLinkPlugin';
 import { bulletListPlugin } from './extensions/BulletListPlugin';
 import { listGuidesPlugin } from './extensions/ListGuidesPlugin';
 import { searchEmojis, type EmojiItem } from '../../utils/emojiData';
-import { searchItems, type SearchableItem } from '../../utils/searchIndex';
+import { searchItems } from '../../utils/searchIndex';
 import { List, CheckSquare, Heading1, Heading2, Quote } from 'lucide-react';
 
 // --- Theme ---
@@ -35,96 +35,12 @@ const editorTheme = EditorView.theme({
         maxWidth: "900px", 
         margin: "0 auto",
     },
-    ".cm-line": {
-        padding: "0.2em 0",
-        lineHeight: "1.6",
-    },
-    ".cm-cursor, .cm-dropCursor": {
-        display: "none !important", // Hide native cursor in favor of smooth cursor
-    },
-    "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
-        backgroundColor: "var(--primary-faded) !important",
-    },
-    ".cm-activeLine": {
-        backgroundColor: "transparent",
-    },
-    ".cm-gutters": {
-        backgroundColor: "var(--bg-primary)",
-        color: "var(--text-muted)",
-        border: "none",
-    },
-    // Markdown Specifics
-    ".cm-header": {
-        fontWeight: "bold",
-        color: "var(--text-primary)",
-    },
-    ".cm-header-1": { fontSize: "2.0em", lineHeight: "1.2", marginBottom: "0.5em" },
-    ".cm-header-2": { fontSize: "1.6em", lineHeight: "1.3", marginBottom: "0.5em" },
-    ".cm-header-3": { fontSize: "1.4em", marginBottom: "0.5em" },
-    ".cm-quote": {
-        borderLeft: "4px solid var(--border-color)",
-        paddingLeft: "1em",
-        color: "var(--text-secondary)",
-        fontStyle: "italic"
-    },
-    ".cm-link, .cm-link *": {
-        color: "var(--primary-color) !important",
-        textDecoration: "underline",
-        cursor: "pointer",
-        fontWeight: "500"
-    },
-    ".cm-url": {
-        color: "var(--text-tertiary)",
-    },
-    // Bullet Points
-    ".bullet-point": {
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: "1.5em",
-        height: "1.5em",
-        verticalAlign: "middle",
-        cursor: "pointer",
-        color: "var(--primary-color)",
-        marginRight: "4px",
-        borderRadius: "50%",
-        transition: "background-color 0.2s, color 0.2s",
-    },
-    ".bullet-point:hover": {
-         backgroundColor: "rgba(0, 0, 0, 0.05)",
-         color: "var(--primary-hover)",
-    },
-    ".bullet-dot": {
-        width: "6px",
-        height: "6px",
-        backgroundColor: "currentColor",
-        borderRadius: "50%",
-        pointerEvents: "none",
-    },
-    // Indentation Guides
-    ".cm-indent-guide": {
-         display: "inline-block",
-         position: "relative",
-         width: "1.5em", // Match bullet width to align perfectly
-         textAlign: "center", // Center the content (spaces are invisible anyway but for safety)
-         verticalAlign: "middle", // Align with line
-    },
-    ".cm-indent-guide::before": {
-         content: '""',
-         position: "absolute",
-         top: "-0.3em", // Match line-height 1.6 (0.3 + 1 + 0.3 = 1.6)
-         bottom: "-0.3em",
-         left: "50%",
-         borderLeft: "1px solid var(--border-color)",
-         opacity: "0.5",
-         pointerEvents: "none",
-         transform: "translateX(-50%)"
-    }
+    // Styles moved to src/index.css for easier global overriding
 });
 
 // --- Live Preview Plugins ---
 
-const headerPlugin = ViewPlugin.fromClass(class {
+const markdownDecorationsPlugin = ViewPlugin.fromClass(class {
     decorations: DecorationSet;
     constructor(view: EditorView) {
         this.decorations = this.getDecorations(view);
@@ -135,33 +51,156 @@ const headerPlugin = ViewPlugin.fromClass(class {
         }
     }
     getDecorations(view: EditorView) {
-        const builder = new RangeSetBuilder<Decoration>();
+        const decorations: Range<Decoration>[] = [];
         const { state } = view;
-        const selectionInfo = state.selection.ranges[0]; // Simple selection check
+        const selectionInfo = state.selection.ranges[0];
 
         for (const { from, to } of view.visibleRanges) {
             syntaxTree(state).iterate({
                 from, to,
                 enter: (node) => {
-                    if (node.name.startsWith("ATXHeading")) {
-                        // Check if cursor is on this line
-                        const line = state.doc.lineAt(node.from);
-                        const isFocused = selectionInfo.from >= line.from && selectionInfo.to <= line.to;
+                    const nodeType = node.name;
+                    const isFocused = (selectionInfo.from >= node.from && selectionInfo.to <= node.to) ||
+                                      (selectionInfo.from <= node.to && selectionInfo.to >= node.from);
 
-                        if (!isFocused) {
-                           // Find the hashmarks
+                    // 1. Headings
+                    if (nodeType.startsWith("ATXHeading")) {
+                        const level = parseInt(nodeType.replace("ATXHeading", ""));
+                        const line = state.doc.lineAt(node.from);
+                        
+                        // Apply sizing class to the whole line
+                        if (!isNaN(level)) {
+                            decorations.push(Decoration.line({ class: `cm-header-${level}` }).range(line.from));
+                        }
+
+                        const isLineFocused = selectionInfo.from >= line.from && selectionInfo.to <= line.to;
+                        if (!isLineFocused) {
                            const text = state.sliceDoc(node.from, node.to);
                            const match = text.match(/^#+\s/);
                            if (match) {
-                               // Hide the hashmarks
-                               builder.add(node.from, node.from + match[0].length, Decoration.replace({}));
+                               decorations.push(Decoration.replace({}).range(node.from, node.from + match[0].length));
                            }
+                        }
+                    } 
+                    
+                    // 2. Bold (StrongEmphasis) -> **text**
+                    else if (nodeType === "StrongEmphasis") {
+                         if (!isFocused) {
+                             const text = state.sliceDoc(node.from, node.to);
+                             const startMatch = text.match(/^([*_]{2})/);
+                             const endMatch = text.match(/([*_]{2})$/);
+                             
+                             if (startMatch && endMatch) {
+                                 decorations.push(Decoration.mark({ class: "cm-bold" }).range(node.from, node.to));
+                                 decorations.push(Decoration.replace({}).range(node.from, node.from + 2));
+                                 decorations.push(Decoration.replace({}).range(node.to - 2, node.to));
+                             }
+                         }
+                    }
+                    
+                    // 3. Italic (Emphasis) -> *text*
+                    else if (nodeType === "Emphasis") {
+                        if (!isFocused) {
+                            const text = state.sliceDoc(node.from, node.to);
+                            const startMatch = text.match(/^([*_]{1})/);
+                            const endMatch = text.match(/([*_]{1})$/);
+                             if (startMatch && endMatch) {
+                                 decorations.push(Decoration.mark({ class: "cm-italic" }).range(node.from, node.to));
+                                 decorations.push(Decoration.replace({}).range(node.from, node.from + 1));
+                                 decorations.push(Decoration.replace({}).range(node.to - 1, node.to));
+                             }
+                        }
+                    }
+                    
+                    // 4. Strikethrough -> ~~text~~
+                    else if (nodeType === "Strikethrough") {
+                        if (!isFocused) {
+                             decorations.push(Decoration.mark({ class: "cm-strike" }).range(node.from, node.to));
+                             decorations.push(Decoration.replace({}).range(node.from, node.from + 2));
+                             decorations.push(Decoration.replace({}).range(node.to - 2, node.to));
+                        }
+                    }
+                    
+                    // 5. Inline Code -> `text`
+                    else if (nodeType === "InlineCode") {
+                        if (!isFocused) {
+                             const text = state.sliceDoc(node.from, node.to);
+                             const match = text.match(/^(`+)([^`]+)(`+)$/);
+                             if (match) {
+                                 const startLen = match[1].length;
+                                 const endLen = match[3].length;
+                                 decorations.push(Decoration.mark({ class: "cm-code" }).range(node.from, node.to));
+                                 decorations.push(Decoration.replace({}).range(node.from, node.from + startLen));
+                                 decorations.push(Decoration.replace({}).range(node.to - endLen, node.to));
+                             }
+                        }
+                    }
+
+                    // 6. Horizontal Rule -> ---
+                    else if (nodeType === "HorizontalRule") {
+                         const line = state.doc.lineAt(node.from);
+                         const isLineFocused = selectionInfo.from >= line.from && selectionInfo.to <= line.to;
+                         if (!isLineFocused) {
+                             decorations.push(Decoration.replace({
+                                 widget: new class extends WidgetType {
+                                     toDOM() { 
+                                         const hr = document.createElement("hr"); 
+                                         hr.className = "cm-hr";
+                                         return hr;
+                                     } 
+                                 }
+                             }).range(node.from, node.to));
+                         }
+                    }
+                    
+                    // 7. Images -> ![alt](url)
+                    else if (nodeType === "Image") {
+                         if (!isFocused) {
+                             const text = state.sliceDoc(node.from, node.to);
+                             const match = text.match(/!\[(.*?)\]\((.*?)\)/);
+                             if (match) {
+                                 const alt = match[1];
+                                 const src = match[2];
+                                 decorations.push(Decoration.replace({
+                                     widget: new class extends WidgetType {
+                                         toDOM() {
+                                             const img = document.createElement("img");
+                                             img.src = src;
+                                             img.alt = alt;
+                                             img.className = "cm-image-widget";
+                                             return img;
+                                         }
+                                     }
+                                 }).range(node.from, node.to));
+                             }
+                         }
+                    }
+                    
+                    // 8. Blockquote - apply line styling
+                    else if (nodeType === "Blockquote") {
+                        const startLine = state.doc.lineAt(node.from).number;
+                        const endLine = state.doc.lineAt(node.to).number;
+                        for (let i = startLine; i <= endLine; i++) {
+                            const line = state.doc.line(i);
+                             decorations.push(Decoration.line({ class: "cm-blockquote" }).range(line.from));
+                        }
+                    }
+
+                    // 9. QuoteMark
+                    else if (nodeType === "QuoteMark") {
+                        const line = state.doc.lineAt(node.from);
+                        const isLineFocused = selectionInfo.from >= line.from && selectionInfo.to <= line.to;
+                        if (!isLineFocused) {
+                            decorations.push(Decoration.replace({}).range(node.from, node.to));
+                             // Hide following space if present
+                             const nextChar = state.sliceDoc(node.to, node.to + 1);
+                             if (nextChar === ' ') decorations.push(Decoration.replace({}).range(node.to, node.to + 1));
                         }
                     }
                 }
             });
         }
-        return builder.finish();
+        return Decoration.set(decorations, true);
     }
 }, {
     decorations: v => v.decorations
@@ -197,7 +236,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
              }
         }),
         EditorView.domEventHandlers({
-            mousedown: (event, view) => {
+            mousedown: (event) => {
                  const target = event.target as HTMLElement;
                  // Check if clicked element is a link or has parent
                  const link = target.closest('.cm-link');
@@ -218,7 +257,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                  }
             }
         }),
-        headerPlugin,
+        markdownDecorationsPlugin,
         wikiLinkPlugin,
         bulletListPlugin,
         listGuidesPlugin,
@@ -234,7 +273,6 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
     
     // Suggestion Items
     const [emojiItems, setEmojiItems] = useState<EmojiItem[]>([]);
-    const [backlinkItems, setBacklinkItems] = useState<SearchableItem[]>([]);
 
     const slashListRef = useRef<SlashCommandsListHandle>(null);
     const emojiListRef = useRef<EmojiSuggestionsHandle>(null);
@@ -336,12 +374,13 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
 
 
     // Handle Backlink Filtering
-    useEffect(() => {
+    // Derived Backlink Items (Memoized)
+    const backlinkItems = useMemo(() => {
         if (suggestionState.trigger === '[[') {
             const query = suggestionState.query;
-            const results = searchItems(query);
-            setBacklinkItems(results);
+            return searchItems(query);
         }
+        return [];
     }, [suggestionState.trigger, suggestionState.query]);
 
     // Keyboard Navigation Interception

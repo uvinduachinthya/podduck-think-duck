@@ -229,7 +229,7 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
             if (file.size === 0) {
                 const writable = await fileHandle.createWritable();
                 // Default content
-                await writable.write(`# ${name.replace('.md', '')}\n\n`);
+                await writable.write('');
                 await writable.close();
             }
 

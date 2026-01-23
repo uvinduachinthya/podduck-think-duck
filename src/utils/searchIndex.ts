@@ -16,79 +16,57 @@ export interface SearchableItem {
 let searchIndex: SearchableItem[] = [];
 
 /**
- * Parse TipTap JSON structure to extract blocks and found backlinks
- * TipTap stores content as: doc > bulletList > listItem > paragraph
+ * Parse Markdown to extract blocks and backlinks
  */
-function parseTipTapBlocks(
-    tiptapDoc: any,
+function parseMarkdownBlocks(
+    content: string,
     pageName: string,
     pageId: string,
     lastModified: number,
     foundBacklinks: Set<string>
 ): SearchableItem[] {
     const items: SearchableItem[] = [];
+    if (!content) return items;
 
-    if (!tiptapDoc || !tiptapDoc.content) return items;
-
-    // Recursive helper to traverse nodes and collect backlinks
-    const scanForBacklinks = (nodes: any[]) => {
-        for (const node of nodes) {
-            if (node.type === 'backlink' && node.attrs && node.attrs.pageId) {
-                foundBacklinks.add(node.attrs.pageId);
-            }
-            if (node.content) {
-                scanForBacklinks(node.content);
-            }
-        }
-    };
-
-    // Initial scan for ALL backlinks in the doc, regardless of structure
-    scanForBacklinks(tiptapDoc.content);
-
-    // Find bulletList nodes for Block Indexing
-    for (const node of tiptapDoc.content) {
-        if (node.type === 'bulletList' && node.content) {
-            // Process each listItem as a block
-            for (const listItem of node.content) {
-                if (listItem.type === 'listItem' && listItem.content) {
-                    // Extract text from paragraph
-                    let text = '';
-                    for (const para of listItem.content) {
-                        if (para.type === 'paragraph' && para.content) {
-                            for (const textNode of para.content) {
-                                if (textNode.type === 'text' && textNode.text) {
-                                    text += textNode.text;
-                                } else if (textNode.type === 'backlink' && textNode.attrs) {
-                                    // Handle backlinks in text
-                                    text += textNode.attrs.label || '';
-                                }
-                            }
-                        }
-                    }
-
-                    // Index this block if it has text
-                    if (text.trim().length > 0) {
-                        const blockId = `block-${Math.random().toString(36).substr(2, 9)}`;
-                        items.push({
-                            type: 'block',
-                            id: blockId,
-                            title: text.trim(),
-                            fullContent: text.trim(),
-                            pageName,
-                            pageId,
-                            lastModified,
-                        });
-                    }
-                }
-            }
-        }
+    // Regex to find backlinks [[link]]
+    const backlinkRegex = /\[\[([^\]]+)\]\]/g;
+    let match;
+    while ((match = backlinkRegex.exec(content)) !== null) {
+        foundBacklinks.add(match[1]);
     }
+
+    // Split by lines to find blocks (paragraphs, list items)
+    const lines = content.split('\n');
+    
+    lines.forEach((line, index) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        
+        // Skip headers as blocks (they are pages usually, but could be sections)
+        if (trimmed.startsWith('#')) return;
+
+        // Clean list markers
+        const cleanText = trimmed.replace(/^[-*]\s+/, '').replace(/^\d+\.\s+/, '');
+
+        if (cleanText.length > 0) {
+             const blockId = `block-${pageId}-${index}`;
+             items.push({
+                 type: 'block',
+                 id: blockId,
+                 title: cleanText,
+                 fullContent: cleanText,
+                 pageName,
+                 pageId,
+                 lastModified
+             });
+        }
+    });
 
     return items;
 }
 
 /**
- * Build search index from all JSON files in directory handle
+ * Build search index from all MD files in directory handle
  */
 export async function buildSearchIndex(directoryHandle: FileSystemDirectoryHandle): Promise<void> {
     const startTime = performance.now();
@@ -103,15 +81,14 @@ export async function buildSearchIndex(directoryHandle: FileSystemDirectoryHandl
 
         // Iterate over all files in directory
         for await (const entry of (directoryHandle as any).values()) {
-            if (entry.kind === 'file' && entry.name.endsWith('.json')) {
+            if (entry.kind === 'file' && entry.name.endsWith('.md')) {
                 try {
                     const fileHandle: FileSystemFileHandle = entry;
                     const file = await fileHandle.getFile();
                     const content = await file.text();
-                    const data = JSON.parse(content);
-
+                    
                     const lastModified = file.lastModified;
-                    const pageId = entry.name.replace('.json', '');
+                    const pageId = entry.name.replace('.md', '');
                     const pageName = pageId;
 
                     existingPages.add(pageId);
@@ -127,8 +104,8 @@ export async function buildSearchIndex(directoryHandle: FileSystemDirectoryHandl
                     });
                     totalPages++;
 
-                    // Index all blocks using TipTap parser
-                    const blockItems = parseTipTapBlocks(data, pageName, pageId, lastModified, foundBacklinks);
+                    // Index blocks
+                    const blockItems = parseMarkdownBlocks(content, pageName, pageId, lastModified, foundBacklinks);
                     searchIndex.push(...blockItems);
                     totalBlocks += blockItems.length;
                 } catch (err) {
@@ -140,15 +117,13 @@ export async function buildSearchIndex(directoryHandle: FileSystemDirectoryHandl
         // Process collected backlinks to find phantoms
         for (const linkId of foundBacklinks) {
             if (!existingPages.has(linkId)) {
-                // Determine if we already have this phantom (unlikely in fresh build, but safe check)
-                // Actually searchIndex is strictly pages and blocks so far.
                 searchIndex.push({
                     type: 'phantom',
                     id: `phantom-${linkId}`,
                     title: linkId,
                     pageId: linkId,
                     pageName: 'Phantom Note',
-                    lastModified: Date.now() // Treat as fresh
+                    lastModified: Date.now() 
                 });
             }
         }
@@ -169,7 +144,7 @@ export async function buildSearchIndex(directoryHandle: FileSystemDirectoryHandl
  */
 export function removePageFromIndex(pageId: string): void {
     searchIndex = searchIndex.filter(item => {
-        if (item.type === 'phantom' && item.pageId === pageId) return true; // Keep phantoms if they exist (though usually they wouldn't if page existed)
+        if (item.type === 'phantom' && item.pageId === pageId) return true; 
         return item.pageId !== pageId;
     });
     console.log(`Removed ${pageId} from index`);
@@ -182,10 +157,9 @@ export async function updateIndexForFile(
     directoryHandle: FileSystemDirectoryHandle,
     fileName: string
 ): Promise<void> {
-    const pageId = fileName.replace('.json', '');
+    const pageId = fileName.replace('.md', '');
 
     // Remove existing entries for this page (page and blocks)
-    // Also remove any 'phantom' entry that matches this pageId (since it's becoming real)
     searchIndex = searchIndex.filter(item => {
         if (item.type === 'phantom' && item.pageId === pageId) return false;
         return item.pageId !== pageId;
@@ -195,7 +169,6 @@ export async function updateIndexForFile(
         const fileHandle = await directoryHandle.getFileHandle(fileName);
         const file = await fileHandle.getFile();
         const content = await file.text();
-        const data = JSON.parse(content);
         const lastModified = file.lastModified;
 
         const pageName = pageId;
@@ -211,12 +184,11 @@ export async function updateIndexForFile(
             lastModified,
         });
 
-        // Re-index blocks using TipTap parser
-        const blockItems = parseTipTapBlocks(data, pageName, pageId, lastModified, foundBacklinks);
+        // Re-index blocks
+        const blockItems = parseMarkdownBlocks(content, pageName, pageId, lastModified, foundBacklinks);
         searchIndex.push(...blockItems);
 
-        // Process found backlinks to potentially add phantoms
-        // Note: we don't have global visibility here, so we check against current searchIndex
+        // Process found backlinks
         for (const linkId of foundBacklinks) {
             const exists = searchIndex.some(item =>
                 (item.type === 'page' && item.pageId === linkId) ||
@@ -224,8 +196,6 @@ export async function updateIndexForFile(
             );
 
             if (!exists) {
-                // Double check if it's REALLY not a page (in case searchIndex lookup missed it?)
-                // Assuming searchIndex is source of truth.
                 searchIndex.push({
                     type: 'phantom',
                     id: `phantom-${linkId}`,

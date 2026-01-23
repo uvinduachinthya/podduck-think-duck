@@ -46,7 +46,7 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
     const refreshFiles = useCallback(async (handle: FileSystemDirectoryHandle) => {
         const filePromises: Promise<FileNode>[] = [];
         for await (const entry of (handle as any).values()) {
-            if (entry.kind === 'file' && entry.name.endsWith('.json')) {
+            if (entry.kind === 'file' && entry.name.endsWith('.md')) {
                 filePromises.push(entry.getFile().then((file: File) => ({
                     name: entry.name,
                     handle: entry,
@@ -91,14 +91,14 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
 
     const openDailyNote = useCallback(async (handle: FileSystemDirectoryHandle) => {
         const today = new Date();
-        const dailyNoteName = `${format(today, 'MMMM do, yyyy')}.json`;
+        const dailyNoteName = `${format(today, 'MMMM do, yyyy')}.md`;
 
         try {
             const fileHandle = await handle.getFileHandle(dailyNoteName, { create: true });
             const file = await fileHandle.getFile();
             if (file.size === 0) {
                 const writable = await fileHandle.createWritable();
-                await writable.write('');
+                await writable.write(`# ${format(today, 'MMMM do, yyyy')}\n\n`);
                 await writable.close();
             }
             await refreshFiles(handle);
@@ -197,10 +197,10 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
         setCurrentFile(file);
     }, []);
 
-    const saveFile = useCallback(async (fileHandle: FileSystemFileHandle, content: any) => {
+    const saveFile = useCallback(async (fileHandle: FileSystemFileHandle, content: string) => {
         try {
             const writable = await fileHandle.createWritable();
-            await writable.write(JSON.stringify(content, null, 2));
+            await writable.write(content);
             await writable.close();
 
             // Update search index (Worker)
@@ -220,8 +220,8 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
     const createNewNote = useCallback(async (filename: string, shouldSwitch = true) => {
         if (!rootHandle) return;
         try {
-            // Ensure filename ends with .json
-            const name = filename.endsWith('.json') ? filename : `${filename}.json`;
+            // Ensure filename ends with .md
+            const name = filename.endsWith('.md') ? filename : `${filename}.md`;
             const fileHandle = await rootHandle.getFileHandle(name, { create: true });
 
             // Check if empty
@@ -229,10 +229,7 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
             if (file.size === 0) {
                 const writable = await fileHandle.createWritable();
                 // Default content
-                await writable.write(JSON.stringify({
-                    type: 'doc',
-                    content: [{ type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }] }]
-                }));
+                await writable.write(`# ${name.replace('.md', '')}\n\n`);
                 await writable.close();
             }
 
@@ -254,8 +251,8 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
     const renameFile = useCallback(async (oldName: string, newNameStr: string) => {
         if (!rootHandle) return;
 
-        // Ensure new name ends with .json
-        const newName = newNameStr.endsWith('.json') ? newNameStr : `${newNameStr}.json`;
+        // Ensure new name ends with .md
+        const newName = newNameStr.endsWith('.md') ? newNameStr : `${newNameStr}.md`;
         // Native rename not fully supported in all File System Access API implementations directly on handle?
         // Actually, typically requires move() or copying.
         // Assuming we implement copy + delete for now or if 'move' is available.
@@ -296,7 +293,7 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
             }
 
             // Update search index: Remove old, add new
-            removePageFromIndex(oldName.replace('.json', ''));
+            removePageFromIndex(oldName.replace('.md', ''));
             updateIndexForFile(rootHandle, newName);
 
         } catch (err) {
@@ -317,7 +314,7 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
             }
 
             // Remove from search index
-            removePageFromIndex(filename.replace('.json', ''));
+            removePageFromIndex(filename.replace('.md', ''));
 
             syncChannel.current?.postMessage({ type: 'DELETE_FILE', filename });
         } catch (err) {
@@ -347,7 +344,7 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
         try {
             // dateString is YYYY-MM-DD from calendar
             const date = new Date(dateString);
-            const dailyNoteName = `${format(date, 'MMMM do, yyyy')}.json`;
+            const dailyNoteName = `${format(date, 'MMMM do, yyyy')}.md`;
             const fileHandle = await rootHandle.getFileHandle(dailyNoteName, { create: true });
             const file = await fileHandle.getFile();
             if (file.size === 0) {

@@ -307,10 +307,32 @@ self.onmessage = async (e: MessageEvent) => {
             search(payload);
             break;
 
+
         case 'GET_BACKLINKS':
             // payload is target ID (e.g. "PageName" or "PageName#^block")
             const backlinkPages = reverseIndex[payload] || [];
             self.postMessage({ type: 'BACKLINKS_RESULT', target: payload, results: backlinkPages });
+            break;
+
+        case 'GET_AFFECTED_FILES_FOR_RENAME':
+            // payload: oldPageName
+            const oldName = payload;
+            const affectedFiles = new Set<string>();
+            
+            // Check exact page link
+            if (reverseIndex[oldName]) {
+                reverseIndex[oldName].forEach(f => affectedFiles.add(f));
+            }
+
+            // Check block links: Key starts with "OldName#"
+            const prefix = `${oldName}#`;
+            Object.keys(reverseIndex).forEach(key => {
+                if (key.startsWith(prefix)) {
+                    reverseIndex[key].forEach(f => affectedFiles.add(f));
+                }
+            });
+
+            self.postMessage({ type: 'RENAME_AFFECTED_RESULT', target: oldName, results: Array.from(affectedFiles) });
             break;
 
         case 'EXPORT_INDEX':

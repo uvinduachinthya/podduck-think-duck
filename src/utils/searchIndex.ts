@@ -288,3 +288,15 @@ export function searchItems(query: string): SearchableItem[] {
 export function getIndex(): SearchableItem[] {
     return [...searchIndex];
 }
+
+/**
+ * Look up content for a specific block ID
+ */
+export function getBlockContent(pageId: string, blockId: string): string | null {
+    const item = searchIndex.find(item => 
+        item.type === 'block' && 
+        item.pageId === pageId && 
+        item.id === blockId
+    );
+    return item ? item.title : null; // returns the content (title is content in our schema)
+}

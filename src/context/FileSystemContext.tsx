@@ -42,7 +42,7 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
     const [currentFile, setCurrentFile] = useState<FileNode | null>(null);
     const [rootHandle, setRootHandle] = useState<FileSystemDirectoryHandle | null>(null);
     const syncChannel = useRef<BroadcastChannel | null>(null);
-    const { buildIndex, updateFile, removeFile, searchAsync, exportIndex, importIndex } = useSearchWorker();
+    const { buildIndex, updateFile, removeFile, searchAsync, exportIndex, importIndex, getAffectedFilesForRename } = useSearchWorker();
 
     // Debounced save index ref
     const saveIndexTimeoutRef = useRef<any | null>(null);
@@ -359,10 +359,12 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
 
         // Ensure new name ends with .md
         const newName = newNameStr.endsWith('.md') ? newNameStr : `${newNameStr}.md`;
-        // Native rename not fully supported in all File System Access API implementations directly on handle?
-        // Actually, typically requires move() or copying.
-        // Assuming we implement copy + delete for now or if 'move' is available.
-        // Chrome 111+ supports move().
+        
+        // 1. Get affected files BEFORE renaming
+        const oldPageId = oldName.replace('.md', '');
+        const newPageId = newName.replace('.md', '');
+        const affectedFiles = await getAffectedFilesForRename(oldPageId);
+        
         try {
             const oldHandle = await rootHandle.getFileHandle(oldName);
             // Try move first, fallback to copy/delete
@@ -399,14 +401,48 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
             }
 
             // Update search index: Remove old, add new
-            removePageFromIndex(oldName.replace('.md', ''));
-            updateIndexForFile(rootHandle, newName);
+            removePageFromIndex(oldPageId); // Remove old ID
+            updateIndexForFile(rootHandle, newName); // Add new file
+
+            // 2. Update Backlinks in other files
+            for (const filename of affectedFiles) {
+                if (filename === oldPageId) continue; // Skip self (already renamed)
+                
+                try {
+                    const targetFileHandle = await rootHandle.getFileHandle(filename + '.md');
+                    const file = await targetFileHandle.getFile();
+                    const content = await file.text();
+                    
+                    // Replace logic
+                    // [[OldName]] -> [[NewName]]
+                    // [[OldName|Alias]] -> [[NewName|Alias]]
+                    // [[OldName#^block]] -> [[NewName#^block]]
+                    
+                    // Regex construction: match [[OldName followed by ] or | or #
+                    const regex = new RegExp(`\\[\\[${oldPageId}(?=[\\|\\]#])`, 'g');
+                    const newContent = content.replace(regex, `[[${newPageId}`);
+                    
+                    if (newContent !== content) {
+                        const writable = await targetFileHandle.createWritable();
+                        await writable.write(newContent);
+                        await writable.close();
+                        
+                        updateFile(filename + '.md'); // Update validation
+                        // console.log(`Updated backlinks in ${filename}`);
+                    }
+                } catch (e) {
+                    console.warn(`Failed to update backlink in ${filename}:`, e);
+                }
+            }
+            
+            // Trigger save of index
+            saveGlobalIndexCallback(rootHandle).catch(console.error);
 
         } catch (err) {
             console.error('Error renaming:', err);
             throw err;
         }
-    }, [rootHandle, refreshFiles, removeFile, currentFile]);
+    }, [rootHandle, refreshFiles, removeFile, currentFile, getAffectedFilesForRename, updateFile, saveGlobalIndexCallback]);
 
 
     const deleteFile = useCallback(async (filename: string) => {

@@ -622,7 +622,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                                                          view.dispatch({
                                                              changes: { from: line.to, insert: ` ^${newId}` }
                                                          });
-                                                         insertText = `[[${item.pageName}#^${newId}|${item.fullContent}]]`;
+                                                         insertText = `[[${item.pageName}#^${newId}]]`;
                                                      }
                                                  }
                                              } else {
@@ -634,7 +634,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                                                       view.dispatch({
                                                           changes: { from: line.to, insert: ` ^${newId}` }
                                                       });
-                                                      insertText = `[[${item.pageName}#^${newId}|${item.fullContent}]]`;
+                                                      insertText = `[[${item.pageName}#^${newId}]]`;
                                                  }
                                              }
                                          }
@@ -643,7 +643,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                                         // If stable ID exists, use it
                                          const hasStableId = !item.id.startsWith('block-');
                                          if (hasStableId) {
-                                             insertText = `[[${item.pageName}#^${item.id}|${item.fullContent}]]`;
+                                             insertText = `[[${item.pageName}#^${item.id}]]`;
                                          } else if (addBlockIdToFile) {
                                              // No stable ID, try to generate one in external file
                                              
@@ -654,14 +654,14 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                                                     // Usually safe enough for milliseconds later if user is typing.
                                                     // Ideally we use a transaction with spec.
                                                     // But for now, let's just insert
-                                                    const cleanContent = (item.fullContent || '').replace(/\s\^[a-zA-Z0-9-]+$/, '');
+
                                                     view.dispatch({
                                                         changes: { 
                                                             from: suggestionState.from, 
                                                             to: suggestionState.to, 
-                                                            insert: `[[${item.pageName}#^${newId}|${cleanContent}]]` 
+                                                            insert: `[[${item.pageName}#^${newId}]]` 
                                                         },
-                                                        selection: { anchor: suggestionState.from + `[[${item.pageName}#^${newId}|${cleanContent}]]`.length }
+                                                        selection: { anchor: suggestionState.from + `[[${item.pageName}#^${newId}]]`.length }
                                                     });
                                                  } else if (view) {
                                                      // Failed to add ID, fallback to page link

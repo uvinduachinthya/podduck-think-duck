@@ -90,6 +90,23 @@ export function useSearchWorker() {
         });
     }, []);
 
+    const getAffectedFilesForRename = useCallback((oldName: string): Promise<string[]> => {
+        return new Promise((resolve) => {
+            if (!workerRef.current) {
+                resolve([]);
+                return;
+            }
+            const handler = (e: MessageEvent) => {
+                if (e.data.type === 'RENAME_AFFECTED_RESULT' && e.data.target === oldName) {
+                    workerRef.current?.removeEventListener('message', handler);
+                    resolve(e.data.results);
+                }
+            };
+            workerRef.current.addEventListener('message', handler);
+            workerRef.current.postMessage({ type: 'GET_AFFECTED_FILES_FOR_RENAME', payload: oldName });
+        });
+    }, []);
+
     const exportIndex = useCallback((): Promise<any> => {
         return new Promise((resolve) => {
             if (!workerRef.current) {
@@ -121,6 +138,7 @@ export function useSearchWorker() {
         updateFile,
         removeFile,
         getBacklinks,
+        getAffectedFilesForRename,
         exportIndex,
         importIndex
     };

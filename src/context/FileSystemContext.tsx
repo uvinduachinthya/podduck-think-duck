@@ -42,7 +42,47 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
     const [currentFile, setCurrentFile] = useState<FileNode | null>(null);
     const [rootHandle, setRootHandle] = useState<FileSystemDirectoryHandle | null>(null);
     const syncChannel = useRef<BroadcastChannel | null>(null);
-    const { buildIndex, updateFile, removeFile, searchAsync } = useSearchWorker();
+    const { buildIndex, updateFile, removeFile, searchAsync, exportIndex, importIndex } = useSearchWorker();
+
+    // Debounced save index ref
+    const saveIndexTimeoutRef = useRef<any | null>(null);
+
+    const saveGlobalIndexCallback = useCallback(async (handle: FileSystemDirectoryHandle) => {
+        try {
+            // Get index data from worker
+            const indexData = await exportIndex();
+            if (!indexData) return;
+
+            // Save to .podduck/index.json
+            const podduckDir = await handle.getDirectoryHandle('.podduck', { create: true });
+            const indexFile = await podduckDir.getFileHandle('index.json', { create: true });
+            const writable = await indexFile.createWritable();
+            await writable.write(JSON.stringify(indexData));
+            await writable.close();
+            // console.log("[FS] Global Index Saved");
+        } catch (err) {
+            console.error("[FS] Failed to save global index:", err);
+        }
+    }, [exportIndex]);
+
+    const loadGlobalIndex = useCallback(async (handle: FileSystemDirectoryHandle) => {
+         try {
+             // Try to find .podduck/index.json
+             const podduckDir = await handle.getDirectoryHandle('.podduck');
+             const indexFile = await podduckDir.getFileHandle('index.json');
+             const file = await indexFile.getFile();
+             const text = await file.text();
+             const data = JSON.parse(text);
+             
+             // Send to worker
+             importIndex(data);
+             // console.log("[FS] Global Index Loaded");
+         } catch (e) {
+             // It's okay if it doesn't exist yet
+             // console.log("[FS] No global index found, will create new one.");
+         }
+    }, [importIndex]);
+
 
     const refreshFiles = useCallback(async (handle: FileSystemDirectoryHandle) => {
         const filePromises: Promise<FileNode>[] = [];
@@ -59,14 +99,17 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
         const sorted = fileList.sort((a, b) => b.lastModified - a.lastModified);
         setFiles(sorted);
 
-        // Rebuild index (Worker) - Worker handles its own performance, usually fine
+        // Load Index FIRST (if exists), then build/update
+        await loadGlobalIndex(handle);
+
+        // Rebuild index (Worker) - Worker handles its own performance (incremental check)
         buildIndex(handle);
 
         // REMOVED: Rebuild index (Main Thread)
         // buildSearchIndex(handle).catch(err => console.error("Failed to build main thread search index:", err));
 
         return sorted;
-    }, [buildIndex]);
+    }, [buildIndex, loadGlobalIndex]);
 
     // Initialize BroadcastChannel
     useEffect(() => {
@@ -210,13 +253,19 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
             // Update search index (Main Thread)
             if (rootHandle) {
                 updateIndexForFile(rootHandle, fileHandle.name).catch(console.error);
+                
+                // TRIGGER INDEX SAVE (Debounced)
+                if (saveIndexTimeoutRef.current) clearTimeout(saveIndexTimeoutRef.current);
+                saveIndexTimeoutRef.current = setTimeout(() => {
+                    saveGlobalIndexCallback(rootHandle).catch(console.error);
+                }, 5000); // Save index 5 seconds after last edit
             }
 
         } catch (err) {
             console.error('Error saving file:', err);
             throw err;
         }
-    }, [updateFile, rootHandle]);
+    }, [updateFile, rootHandle, saveGlobalIndexCallback]);
 
     const addBlockIdToFile = useCallback(async (filename: string, blockText: string): Promise<string | null> => {
         if (!rootHandle) return null;

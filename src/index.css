@@ -1354,3 +1354,24 @@ emoji-picker::-webkit-scrollbar-button {
     text-decoration: underline;
     color: var(--primary-hover) !important;
 }
+
+
+/* Block ID Styling */
+.cm-block-id-outer {
+    /* Isolate layout to prevent cursor from inheriting line-height/alignment */
+    unicode-bidi: isolate; 
+}
+
+.cm-block-id {
+    font-size: 0.75em;
+    color: var(--text-muted);
+    vertical-align: super;
+    user-select: none;
+    pointer-events: none;
+    margin-left: 0.5em;
+    opacity: 0.6;
+}
+
+.cm-block-id-hidden {
+    display: none;
+}

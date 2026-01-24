@@ -3,7 +3,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { EditorView, Decoration, type DecorationSet, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
-import { Range } from '@codemirror/state';
+import { Range, Prec } from '@codemirror/state';
 import { syntaxTree, indentUnit } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
 import { CodeMirrorSmoothCursor } from './CodeMirrorSmoothCursor';
@@ -12,7 +12,7 @@ import { SlashCommandsList, type SlashCommandItem, type SlashCommandsListHandle 
 import { EmojiSuggestions, type EmojiSuggestionsHandle } from '../EmojiSuggestions';
 import { BacklinkSuggestions, type BacklinkSuggestionsHandle } from '../BacklinkSuggestions';
 import { wikiLinkPlugin } from './extensions/WikiLinkPlugin';
-import blockIdPlugin from './extensions/BlockIdPlugin';
+import blockIdPlugin, { blockIdKeymap } from "./extensions/BlockIdPlugin";
 import { bulletListPlugin } from './extensions/BulletListPlugin';
 import { listGuidesPlugin } from './extensions/ListGuidesPlugin';
 import { searchEmojis, type EmojiItem } from '../../utils/emojiData';
@@ -311,13 +311,14 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                      if (match && match[1]) {
                          window.open(match[1], '_blank');
                          return;
-                     }
+                    }
                  }
             }
         }),
         markdownDecorationsPlugin,
         wikiLinkPlugin,
         blockIdPlugin,
+        Prec.highest(blockIdKeymap),
         bulletListPlugin,
         listGuidesPlugin,
         suggestionExtension, 

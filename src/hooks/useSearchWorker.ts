@@ -72,6 +72,46 @@ export function useSearchWorker() {
         workerRef.current.postMessage({ type: 'REMOVE_FILE', payload: filename });
     }, []);
 
+    const getBacklinks = useCallback((target: string): Promise<string[]> => {
+        return new Promise((resolve) => {
+            if (!workerRef.current) {
+                resolve([]);
+                return;
+            }
+            // Use temporary listener for result
+            const handler = (e: MessageEvent) => {
+                if (e.data.type === 'BACKLINKS_RESULT' && e.data.target === target) {
+                    workerRef.current?.removeEventListener('message', handler);
+                    resolve(e.data.results);
+                }
+            };
+            workerRef.current.addEventListener('message', handler);
+            workerRef.current.postMessage({ type: 'GET_BACKLINKS', payload: target });
+        });
+    }, []);
+
+    const exportIndex = useCallback((): Promise<any> => {
+        return new Promise((resolve) => {
+            if (!workerRef.current) {
+                resolve(null);
+                return;
+            }
+            const handler = (e: MessageEvent) => {
+                if (e.data.type === 'INDEX_EXPORTED') {
+                    workerRef.current?.removeEventListener('message', handler);
+                    resolve(e.data.data);
+                }
+            };
+            workerRef.current.addEventListener('message', handler);
+            workerRef.current.postMessage({ type: 'EXPORT_INDEX' });
+        });
+    }, []);
+
+    const importIndex = useCallback((data: any) => {
+        if (!workerRef.current) return;
+        workerRef.current.postMessage({ type: 'IMPORT_INDEX', payload: data });
+    }, []);
+
     return {
         searchResults,
         isIndexing,
@@ -79,6 +119,9 @@ export function useSearchWorker() {
         search,
         searchAsync,
         updateFile,
-        removeFile
+        removeFile,
+        getBacklinks,
+        exportIndex,
+        importIndex
     };
 }

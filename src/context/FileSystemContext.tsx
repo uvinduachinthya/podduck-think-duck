@@ -26,6 +26,7 @@ export interface FileSystemContextType {
     openDailyNoteManually: () => Promise<void>;
     openDateNote: (dateString: string) => Promise<void>;
     search: (query: string) => Promise<SearchResult[]>;
+    addBlockIdToFile: (filename: string, blockText: string) => Promise<string | null>;
 }
 
 export const FileSystemContext = createContext<FileSystemContextType | undefined>(undefined);
@@ -217,6 +218,62 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
         }
     }, [updateFile, rootHandle]);
 
+    const addBlockIdToFile = useCallback(async (filename: string, blockText: string): Promise<string | null> => {
+        if (!rootHandle) return null;
+        try {
+            // Find the file
+            const fileHandle = await rootHandle.getFileHandle(filename);
+            const file = await fileHandle.getFile();
+            const content = await file.text();
+            
+            // Find the line containing the exact block text
+            // We search for lines that *contain* the text, but ideally it should match the block found by index
+            const lines = content.split('\n');
+            // We'll search for the line that includes the block text. 
+            // Note: blockText coming from searchIndex might be trimmed/processed. 
+            // We should try to find a unique match.
+            
+            // Generate ID
+            const newId = Math.random().toString(36).substr(2, 6);
+            let updatedContent = "";
+            let found = false;
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                // Check if this line roughly matches search text.
+                // We use includes because blockText from index excludes list markers.
+                if (!found && line.includes(blockText)) {
+                    // Check if it already has an ID? Search Index said no stable ID, but maybe it was added just now?
+                    // Regex for existing ID: \^[a-z0-9]{6}$
+                    if (!/ \^[a-z0-9]{6}$/i.test(line)) {
+                        updatedContent += line + ` ^${newId}\n`;
+                        found = true;
+                        continue;
+                    } 
+                    // If it has ID, we return null or the existing ID? 
+                    // Ideally we shouldn't be here if it has ID.
+                }
+                updatedContent += line + '\n';
+            }
+            
+            // Remove last newline if original didn't have one? 
+            // split join adds one. It's fine for markdown.
+            
+            if (found) {
+                // Remove trailing newline added by loop if processed last line
+                updatedContent = updatedContent.slice(0, -1);
+                
+                await saveFile(fileHandle, updatedContent);
+                return newId;
+            }
+            return null;
+
+        } catch (err) {
+            console.error("Error adding block ID:", err);
+            return null;
+        }
+    }, [rootHandle, saveFile]);
+
     const createNewNote = useCallback(async (filename: string, shouldSwitch = true) => {
         if (!rootHandle) return;
         try {
@@ -361,7 +418,7 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
     }, [rootHandle, refreshFiles]);
 
     return (
-        <FileSystemContext.Provider value={{ folderName, files, currentFile, rootHandle, openDirectory, selectFile, saveFile, createNewNote, renameFile, deleteFile, restoreFile, openDailyNoteManually, openDateNote, search: searchAsync }}>
+        <FileSystemContext.Provider value={{ folderName, files, currentFile, rootHandle, openDirectory, selectFile, saveFile, createNewNote, renameFile, deleteFile, restoreFile, openDailyNoteManually, openDateNote, search: searchAsync, addBlockIdToFile }}>
             {children}
         </FileSystemContext.Provider>
     );

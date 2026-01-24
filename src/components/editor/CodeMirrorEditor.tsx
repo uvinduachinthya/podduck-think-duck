@@ -12,6 +12,7 @@ import { SlashCommandsList, type SlashCommandItem, type SlashCommandsListHandle 
 import { EmojiSuggestions, type EmojiSuggestionsHandle } from '../EmojiSuggestions';
 import { BacklinkSuggestions, type BacklinkSuggestionsHandle } from '../BacklinkSuggestions';
 import { wikiLinkPlugin } from './extensions/WikiLinkPlugin';
+import blockIdPlugin from './extensions/BlockIdPlugin';
 import { bulletListPlugin } from './extensions/BulletListPlugin';
 import { listGuidesPlugin } from './extensions/ListGuidesPlugin';
 import { searchEmojis, type EmojiItem } from '../../utils/emojiData';
@@ -240,9 +241,11 @@ interface CodeMirrorEditorProps {
     onChange: (value: string) => void;
     onEditorReady?: (view: EditorView) => void;
     onNavigate?: (target: string) => void;
+    scrollToId?: string | null;
+    addBlockIdToFile?: (filename: string, blockText: string) => Promise<string | null>;
 }
 
-export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, onNavigate }: CodeMirrorEditorProps) {
+export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, onNavigate, scrollToId, addBlockIdToFile }: CodeMirrorEditorProps) {
     
     // Auto-save wrapper
     const handleChange = useCallback((val: string) => {
@@ -277,8 +280,15 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                      event.stopPropagation();
                      
                      const linkText = (link as HTMLElement).innerText; 
+                     const linkTarget = link.getAttribute('data-link-target');
+
+                     // 0. Check for data attribute (added by WikiLinkPlugin for both raw and widgets)
+                     if (linkTarget) {
+                         if (onNavigate) onNavigate(linkTarget);
+                         return;
+                     }
                      
-                     // 1. WikiLink [[Target]]
+                     // 1. WikiLink [[Target]] (Fallback for raw text without attribute if any)
                      if (linkText.startsWith('[[') && linkText.endsWith(']]')) {
                          const cleanTarget = linkText.replace(/^\[\[/, '').replace(/\]\]$/, '');
                          if (onNavigate) onNavigate(cleanTarget);
@@ -307,6 +317,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
         }),
         markdownDecorationsPlugin,
         wikiLinkPlugin,
+        blockIdPlugin,
         bulletListPlugin,
         listGuidesPlugin,
         suggestionExtension, 
@@ -340,6 +351,48 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
         view.dom.addEventListener('suggestion-update', handleSuggestionUpdate);
         return () => view.dom.removeEventListener('suggestion-update', handleSuggestionUpdate);
     }, [view]);
+
+    // Scroll to block ID effect
+    useEffect(() => {
+        if (view && scrollToId) {
+            // Find the block ID in the document: "^blockId"
+            // Or if it's a heading, "# Heading" -> but usually we search for exact ^ID first
+            
+            const docString = view.state.doc.toString();
+            // Try explicit block ID first: " ^id" or "^id " or just "^id" at end of line?
+            // Standard: " ^id"
+            let index = docString.indexOf(` ^${scrollToId}`);
+            if (index === -1) {
+                // Try searching for heading text? 
+                // Maybe the ID passed is actually a heading text (if fallback used)
+                // Try finding "# scrollToId"
+                index = docString.indexOf(`# ${scrollToId}`);
+                if (index === -1) {
+                     // Try just the text? risky
+                     // Try exact match of block ID including caret
+                     index = docString.indexOf(`^${scrollToId}`);
+                }
+            }
+
+            if (index !== -1) {
+                const line = view.state.doc.lineAt(index);
+                // Scroll to line
+                view.dispatch({
+                    effects: EditorView.scrollIntoView(line.from, { y: 'center' }),
+                    selection: { anchor: line.from }
+                });
+                
+                // Highlight the line briefly
+                // const highlightDecoration = Decoration.line({ 
+                //    attributes: { style: "background-color: var(--primary-faded); transition: background-color 1s ease-out;" } 
+                // });
+                // Note: To implement real highlighting, we'd need a StateField. 
+                // Relying on selection is fine for now.
+            } else {
+                console.warn(`[CodeMirror] Scroll target ^${scrollToId} not found`);
+            }
+        }
+    }, [view, scrollToId]);
 
     // Derived Slash Items (Memoized instead of Effect)
     const slashItems = useMemo(() => {
@@ -547,7 +600,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                                          // Check if it has a stable ID
                                          const hasStableId = !item.id.startsWith('block-');
                                          if (hasStableId) {
-                                             insertText = `[[${item.pageName}#^${item.id}]]`;
+                                             insertText = `[[${item.pageName}#^${item.id}|${item.fullContent}]]`;
                                          } else {
                                              // Generate new stable ID
                                              const newId = Math.random().toString(36).substr(2, 6);
@@ -568,7 +621,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                                                          view.dispatch({
                                                              changes: { from: line.to, insert: ` ^${newId}` }
                                                          });
-                                                         insertText = `[[${item.pageName}#^${newId}]]`;
+                                                         insertText = `[[${item.pageName}#^${newId}|${item.fullContent}]]`;
                                                      }
                                                  }
                                              } else {
@@ -580,7 +633,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                                                       view.dispatch({
                                                           changes: { from: line.to, insert: ` ^${newId}` }
                                                       });
-                                                      insertText = `[[${item.pageName}#^${newId}]]`;
+                                                      insertText = `[[${item.pageName}#^${newId}|${item.fullContent}]]`;
                                                  }
                                              }
                                          }
@@ -589,7 +642,39 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                                         // If stable ID exists, use it
                                          const hasStableId = !item.id.startsWith('block-');
                                          if (hasStableId) {
-                                             insertText = `[[${item.pageName}#^${item.id}]]`;
+                                             insertText = `[[${item.pageName}#^${item.id}|${item.fullContent}]]`;
+                                         } else if (addBlockIdToFile) {
+                                             // No stable ID, try to generate one in external file
+                                             
+                                             addBlockIdToFile(item.pageId + '.md', item.fullContent || '').then((newId) => {
+                                                 if (newId && view) {
+                                                       // We need to re-calculate positions? 
+                                                    // The editor state might have changed? 
+                                                    // Usually safe enough for milliseconds later if user is typing.
+                                                    // Ideally we use a transaction with spec.
+                                                    // But for now, let's just insert
+                                                    const cleanContent = (item.fullContent || '').replace(/\s\^[a-zA-Z0-9-]+$/, '');
+                                                    view.dispatch({
+                                                        changes: { 
+                                                            from: suggestionState.from, 
+                                                            to: suggestionState.to, 
+                                                            insert: `[[${item.pageName}#^${newId}|${cleanContent}]]` 
+                                                        },
+                                                        selection: { anchor: suggestionState.from + `[[${item.pageName}#^${newId}|${cleanContent}]]`.length }
+                                                    });
+                                                 } else if (view) {
+                                                     // Failed to add ID, fallback to page link
+                                                     view.dispatch({
+                                                         changes: { 
+                                                             from: suggestionState.from, 
+                                                             to: suggestionState.to, 
+                                                             insert: `[[${item.pageName}]]` 
+                                                         },
+                                                         selection: { anchor: suggestionState.from + `[[${item.pageName}]]`.length }
+                                                     });
+                                                 }
+                                             });
+                                             return; // Async dispatch handles insertion
                                          } else {
                                              // Fallback: Link to block title? Obsidian supports `[[Page#Block Text]]`?
                                              // Or just Page link

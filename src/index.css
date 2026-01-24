@@ -180,6 +180,23 @@ a:visited {
     color: var(--primary-color);
 }
 
+.cm-md-link, .cm-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.cm-md-link:hover, .cm-link:hover {
+    text-decoration: underline;
+}
+
+/* Debug style to see if widget is rendered */
+span.cm-md-link {
+    /* background-color: rgba(79, 101, 242, 0.1); */
+    /* border-radius: 4px; */
+    padding: 0 1px; /* Minimal padding */
+}
+
 /* Button and Clickable Elements */
 button {
     cursor: pointer;

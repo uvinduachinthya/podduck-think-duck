@@ -1,5 +1,5 @@
 
-import { ViewPlugin, Decoration, EditorView, WidgetType } from "@codemirror/view";
+import { ViewPlugin, Decoration, EditorView, WidgetType, ViewUpdate } from "@codemirror/view";
 import type { DecorationSet } from "@codemirror/view";
 import { RangeSetBuilder } from "@codemirror/state";
 
@@ -8,8 +8,13 @@ const blockIdRegex = /\s\^[a-zA-Z0-9-]+$/;
 
 
 class BlockIdWidget extends WidgetType {
-    constructor(readonly text: string, readonly isVisible: boolean) {
+    readonly text: string;
+    readonly isVisible: boolean;
+
+    constructor(text: string, isVisible: boolean) {
         super();
+        this.text = text;
+        this.isVisible = isVisible;
     }
 
     toDOM() {
@@ -43,7 +48,7 @@ const blockIdPlugin = ViewPlugin.fromClass(
             this.decorations = this.getDecorations(view);
         }
 
-        update(update: any) {
+        update(update: ViewUpdate) {
             if (update.docChanged || update.viewportChanged || update.selectionSet) {
                 this.decorations = this.getDecorations(update.view);
             }

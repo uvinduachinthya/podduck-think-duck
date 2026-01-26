@@ -1,4 +1,4 @@
-import { Decoration, type DecorationSet, ViewPlugin, ViewUpdate, EditorView, WidgetType } from '@codemirror/view';
+import { Decoration, type DecorationSet, ViewPlugin, ViewUpdate, EditorView } from '@codemirror/view';
 import { RangeSetBuilder } from '@codemirror/state';
 
 export const listGuidesPlugin = ViewPlugin.fromClass(class {

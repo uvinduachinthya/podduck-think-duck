@@ -12,147 +12,162 @@ export interface SearchableItem {
     lastModified: number; // for recency sorting
 }
 
-// Global in-memory index within the worker
+export interface GraphIndexData {
+    searchIndex: SearchableItem[];
+    fileStats: Record<string, number>;
+    forwardIndex: Record<string, string[]>;
+    reverseIndex: Record<string, string[]>;
+}
+
+// Global state
 let searchIndex: SearchableItem[] = [];
+let fileStats: Record<string, number> = {}; // PageID -> LastModified
+let forwardIndex: Record<string, string[]> = {}; // PageID -> [TargetIDs]
+let reverseIndex: Record<string, string[]> = {}; // TargetID -> [PageIDs]
+
 let directoryHandle: FileSystemDirectoryHandle | null = null;
 
 /**
- * Parse TipTap JSON structure to extract blocks
+ * Parse Markdown to extract blocks and outgoing links
  */
-function parseTipTapBlocks(tiptapDoc: any, pageName: string, pageId: string, lastModified: number): SearchableItem[] {
+function parseAndExtract(
+    content: string,
+    pageName: string,
+    pageId: string,
+    lastModified: number
+): { items: SearchableItem[], links: string[] } {
     const items: SearchableItem[] = [];
+    const links: Set<string> = new Set();
+    
+    if (!content) return { items, links: [] };
 
-    if (!tiptapDoc || !tiptapDoc.content) return items;
-
-    // Find bulletList nodes
-    for (const node of tiptapDoc.content) {
-        if (node.type === 'bulletList' && node.content) {
-            // Process each listItem as a block
-            for (const listItem of node.content) {
-                if (listItem.type === 'listItem' && listItem.content) {
-                    // Extract text from paragraph
-                    let text = '';
-                    for (const para of listItem.content) {
-                        if (para.type === 'paragraph' && para.content) {
-                            for (const textNode of para.content) {
-                                if (textNode.type === 'text' && textNode.text) {
-                                    text += textNode.text;
-                                } else if (textNode.type === 'backlink' && textNode.attrs) {
-                                    // Handle backlinks in text
-                                    text += textNode.attrs.label || '';
-                                }
-                            }
-                        }
-                    }
-
-                    // Index this block if it has text
-                    if (text.trim().length > 0) {
-                        const blockId = `block-${Math.random().toString(36).substr(2, 9)}`;
-                        items.push({
-                            type: 'block',
-                            id: blockId,
-                            title: text.trim(),
-                            fullContent: text.trim(),
-                            pageName,
-                            pageId,
-                            lastModified,
-                        });
-                    }
-                }
-            }
-        }
+    // 1. Extract Links [[Target]] and [[Target|Alias]]
+    const linkRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
+    let linkMatch;
+    while ((linkMatch = linkRegex.exec(content)) !== null) {
+        links.add(linkMatch[1]);
     }
 
-    return items;
+    // 2. Parse Blocks
+    const lines = content.split('\n');
+    
+    lines.forEach((line, index) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        
+        // Skip headers as blocks
+        if (trimmed.startsWith('#')) return;
+
+        // Clean list markers
+        const cleanText = trimmed.replace(/^[-*]\s+/, '').replace(/^\d+\.\s+/, '');
+
+        if (cleanText.length > 0) {
+             // Check for Block ID ^abcdef
+             const blockIdMatch = cleanText.match(/ \^([a-zA-Z0-9]{6})$/);
+             let blockId = `block-${pageId}-${index}`; // Default unstable ID
+             let contentToSave = cleanText;
+
+             if (blockIdMatch) {
+                 blockId = blockIdMatch[1];
+                 contentToSave = cleanText.substring(0, blockIdMatch.index); 
+             }
+
+             items.push({
+                 type: 'block',
+                 id: blockId,
+                 title: contentToSave.trim(),
+                 fullContent: cleanText,
+                 pageName,
+                 pageId,
+                 lastModified
+             });
+        }
+    });
+
+    return { items, links: Array.from(links) };
 }
 
 /**
- * Build search index from all JSON files in directory handle
+ * Update the Graph (Forward/Reverse Index) for a page
  */
-async function buildSearchIndex(handle: FileSystemDirectoryHandle): Promise<void> {
-    const startTime = performance.now();
-    searchIndex = [];
-    directoryHandle = handle;
+function updateGraph(pageId: string, newLinks: string[]) {
+    // 1. Get old links
+    const oldLinks = forwardIndex[pageId] || [];
 
-    try {
-        let totalPages = 0;
-        let totalBlocks = 0;
+    // 2. Diff
+    const added = newLinks.filter(l => !oldLinks.includes(l));
+    const removed = oldLinks.filter(l => !newLinks.includes(l));
 
-        // Iterate over all files in directory
-        // @ts-ignore - FileSystemDirectoryHandle is iterable
-        for await (const entry of handle.values()) {
-            if (entry.kind === 'file' && entry.name.endsWith('.json')) {
-                try {
-                    const fileHandle: FileSystemFileHandle = entry;
-                    const file = await fileHandle.getFile();
-                    const content = await file.text();
+    // 3. Update Forward Index
+    forwardIndex[pageId] = newLinks;
 
-                    if (!content.trim()) continue;
-
-                    const data = JSON.parse(content);
-                    const lastModified = file.lastModified;
-                    const pageId = entry.name.replace('.json', '');
-                    const pageName = pageId;
-
-                    // Add page itself as searchable item
-                    searchIndex.push({
-                        type: 'page',
-                        id: pageId,
-                        title: pageName,
-                        pageName,
-                        pageId,
-                        lastModified,
-                    });
-                    totalPages++;
-
-                    // Index all blocks using TipTap parser
-                    const blockItems = parseTipTapBlocks(data, pageName, pageId, lastModified);
-                    searchIndex.push(...blockItems);
-                    totalBlocks += blockItems.length;
-                } catch (err) {
-                    console.warn(`[Worker] Failed to index ${entry.name}:`, err);
-                }
+    // 4. Update Reverse Index
+    // Remove old connections
+    removed.forEach(target => {
+        if (reverseIndex[target]) {
+            reverseIndex[target] = reverseIndex[target].filter(p => p !== pageId);
+            if (reverseIndex[target].length === 0) {
+                delete reverseIndex[target];
             }
         }
+    });
 
-        const endTime = performance.now();
-        const duration = (endTime - startTime).toFixed(2);
+    // Add new connections
+    added.forEach(target => {
+        if (!reverseIndex[target]) {
+            reverseIndex[target] = [];
+        }
+        if (!reverseIndex[target].includes(pageId)) {
+            reverseIndex[target].push(pageId);
+        }
+    });
+}
 
-        console.log(
-            `✅ [Worker] Search index built: ${totalPages} pages, ${totalBlocks} blocks in ${duration}ms`
-        );
-
-        self.postMessage({ type: 'INDEX_READY', stats: { totalPages, totalBlocks, duration } });
-
-    } catch (err) {
-        console.error('[Worker] Failed to build search index:', err);
-        self.postMessage({ type: 'ERROR', error: (err as Error).message });
-    }
+/**
+ * Remove a page from the index entirely
+ */
+function removePageFromIndex(pageId: string) {
+    // Remove from Search Index
+    searchIndex = searchIndex.filter(item => item.pageId !== pageId);
+    
+    // Update Graph (treat as if it now has 0 links)
+    updateGraph(pageId, []);
+    delete forwardIndex[pageId];
+    
+    // Remove from FileStats
+    delete fileStats[pageId];
 }
 
 /**
  * Update index for a specific file
  */
-async function updateIndexForFile(fileName: string): Promise<void> {
-    if (!directoryHandle) return;
+async function updateIndexForFile(fileName: string, specificFileHandle?: FileSystemFileHandle): Promise<void> {
+    const pageId = fileName.replace('.md', '');
+    
+    // Check handle
+    let fileHandle = specificFileHandle;
+    if (!fileHandle && directoryHandle) {
+        try {
+            fileHandle = await directoryHandle.getFileHandle(fileName);
+        } catch (e) {
+            // File likely deleted
+            removePageFromIndex(pageId);
+            return;
+        }
+    }
 
-    const pageId = fileName.replace('.json', '');
-
-    // Remove existing entries for this page
-    searchIndex = searchIndex.filter(item => item.pageId !== pageId);
+    if (!fileHandle) return;
 
     try {
-        const fileHandle = await directoryHandle.getFileHandle(fileName);
         const file = await fileHandle.getFile();
         const content = await file.text();
-
-        if (!content.trim()) return;
-
-        const data = JSON.parse(content);
         const lastModified = file.lastModified;
         const pageName = pageId;
 
-        // Re-add page
+        // 1. Remove existing search items for this page
+        searchIndex = searchIndex.filter(item => item.pageId !== pageId);
+
+        // 2. Re-add page item
         searchIndex.push({
             type: 'page',
             id: pageId,
@@ -162,109 +177,183 @@ async function updateIndexForFile(fileName: string): Promise<void> {
             lastModified,
         });
 
-        // Re-index blocks
-        const blockItems = parseTipTapBlocks(data, pageName, pageId, lastModified);
+        // 3. Parse content
+        const { items: blockItems, links } = parseAndExtract(content, pageName, pageId, lastModified);
+        
+        // 4. Update Search Index
         searchIndex.push(...blockItems);
 
-        console.log(`[Worker] Updated index for ${fileName}`);
+        // 5. Update Graph
+        updateGraph(pageId, links);
+
+        // 6. Update Stats
+        fileStats[pageId] = lastModified;
+
+        // console.log(`[Worker] Updated ${fileName}`);
         self.postMessage({ type: 'INDEX_UPDATED', fileName });
 
     } catch (err) {
-        // If file was deleted or cannot be read, we just leave it removed from index
-        console.warn(`[Worker] Failed to update index for ${fileName} (might be deleted):`, err);
+        console.warn(`[Worker] Failed to update ${fileName}:`, err);
+        removePageFromIndex(pageId);
     }
 }
 
 /**
- * Calculate match score for a query against a title
+ * Build search index from usage of incremental cache
  */
+async function buildSearchIndex(handle: FileSystemDirectoryHandle): Promise<void> {
+    const startTime = performance.now();
+    directoryHandle = handle;
+
+    let scannedCount = 0;
+    let skippedCount = 0;
+    const seenPages = new Set<string>();
+
+    try {
+        // @ts-ignore
+        for await (const entry of handle.values()) {
+            if (entry.kind === 'file' && entry.name.endsWith('.md')) {
+                const pageId = entry.name.replace('.md', '');
+                seenPages.add(pageId);
+
+                // Quick Stat
+                const fileHandle = entry as FileSystemFileHandle;
+                const file = await fileHandle.getFile();
+                
+                // Incremental Check: If timestamp matches, assume index is valid
+                if (fileStats[pageId] === file.lastModified) {
+                    skippedCount++;
+                    continue;
+                }
+
+                // Needs Update
+                await updateIndexForFile(entry.name, fileHandle);
+                scannedCount++;
+            }
+        }
+
+        // Cleanup: Remove pages that no longer exist in FS
+        const allIndexedPages = Object.keys(fileStats);
+        for (const pId of allIndexedPages) {
+            if (!seenPages.has(pId)) {
+                removePageFromIndex(pId);
+            }
+        }
+
+        const endTime = performance.now();
+        const duration = (endTime - startTime).toFixed(2);
+
+        console.log(
+            `✅ [Worker] Index sync: ${scannedCount} updated, ${skippedCount} cached, ${searchIndex.length} total blocks in ${duration}ms`
+        );
+
+        self.postMessage({ type: 'INDEX_READY', stats: { duration, totalPages: seenPages.size } });
+
+    } catch (err) {
+        console.error('[Worker] Failed to build index:', err);
+        self.postMessage({ type: 'ERROR', error: (err as Error).message });
+    }
+}
+
+// --- Search Logic (Simplified) ---
+
 function calculateMatchScore(query: string, title: string): number {
     const lowerQuery = query.toLowerCase();
     const lowerTitle = title.toLowerCase();
-
-    // Exact match
     if (lowerTitle === lowerQuery) return 100;
-
-    // Starts with
     if (lowerTitle.startsWith(lowerQuery)) return 75;
-
-    // Contains
     if (lowerTitle.includes(lowerQuery)) return 50;
-
-    // Fuzzy match (simplified)
-    let titleIndex = 0;
-    let queryIndex = 0;
-    while (titleIndex < lowerTitle.length && queryIndex < lowerQuery.length) {
-        if (lowerTitle[titleIndex] === lowerQuery[queryIndex]) {
-            queryIndex++;
-        }
-        titleIndex++;
-    }
-    if (queryIndex === lowerQuery.length) return 25;
-
     return 0;
 }
 
-/**
- * Search the index with a query
- */
 function search(query: string) {
     if (!query || query.length === 0) {
-        // Return recent items
         const results = [...searchIndex]
             .sort((a, b) => b.lastModified - a.lastModified)
             .slice(0, 50);
-
         self.postMessage({ type: 'SEARCH_RESULTS', query, results });
         return;
     }
 
-    // Score and filter items
     const matches = searchIndex
-        .map(item => ({
-            item,
-            score: calculateMatchScore(query, item.title),
-        }))
-        .filter(m => m.score > 0);
+        .map(item => ({ item, score: calculateMatchScore(query, item.title) }))
+        .filter(m => m.score > 0)
+        .sort((a, b) => b.score - a.score || b.item.lastModified - a.item.lastModified)
+        .slice(0, 50)
+        .map(m => m.item);
 
-    // Sort by score (desc), then by lastModified (desc)
-    matches.sort((a, b) => {
-        if (a.score !== b.score) return b.score - a.score;
-        return b.item.lastModified - a.item.lastModified;
-    });
-
-    const results = matches.slice(0, 50).map(m => m.item);
-    self.postMessage({ type: 'SEARCH_RESULTS', query, results });
+    self.postMessage({ type: 'SEARCH_RESULTS', query, results: matches });
 }
 
-// Message handler
+// --- Message Handler ---
+
 self.onmessage = async (e: MessageEvent) => {
     const { type, payload } = e.data;
 
     switch (type) {
         case 'BUILD_INDEX':
-            if (payload instanceof FileSystemDirectoryHandle) { // Check if it's a handle
-                await buildSearchIndex(payload);
-            } else {
-                console.error('[Worker] Invalid handle received for BUILD_INDEX');
-            }
+            await buildSearchIndex(payload);
             break;
 
         case 'UPDATE_FILE':
-            if (typeof payload === 'string') {
-                await updateIndexForFile(payload);
-            }
-            break;
-
-        case 'SEARCH':
-            if (typeof payload === 'string') {
-                search(payload);
-            }
+            await updateIndexForFile(payload);
             break;
 
         case 'REMOVE_FILE':
-            const pageId = payload.replace('.json', '');
-            searchIndex = searchIndex.filter(item => item.pageId !== pageId);
+            removePageFromIndex(payload.replace('.md', ''));
+            break;
+
+        case 'SEARCH':
+            search(payload);
+            break;
+
+
+        case 'GET_BACKLINKS':
+            // payload is target ID (e.g. "PageName" or "PageName#^block")
+            const backlinkPages = reverseIndex[payload] || [];
+            self.postMessage({ type: 'BACKLINKS_RESULT', target: payload, results: backlinkPages });
+            break;
+
+        case 'GET_AFFECTED_FILES_FOR_RENAME':
+            // payload: oldPageName
+            const oldName = payload;
+            const affectedFiles = new Set<string>();
+            
+            // Check exact page link
+            if (reverseIndex[oldName]) {
+                reverseIndex[oldName].forEach(f => affectedFiles.add(f));
+            }
+
+            // Check block links: Key starts with "OldName#"
+            const prefix = `${oldName}#`;
+            Object.keys(reverseIndex).forEach(key => {
+                if (key.startsWith(prefix)) {
+                    reverseIndex[key].forEach(f => affectedFiles.add(f));
+                }
+            });
+
+            self.postMessage({ type: 'RENAME_AFFECTED_RESULT', target: oldName, results: Array.from(affectedFiles) });
+            break;
+
+        case 'EXPORT_INDEX':
+            const exportData: GraphIndexData = {
+                searchIndex,
+                fileStats,
+                forwardIndex,
+                reverseIndex
+            };
+            self.postMessage({ type: 'INDEX_EXPORTED', data: exportData });
+            break;
+
+        case 'IMPORT_INDEX':
+            const data = payload as GraphIndexData;
+            if (data) {
+                searchIndex = data.searchIndex || [];
+                fileStats = data.fileStats || {};
+                forwardIndex = data.forwardIndex || {};
+                reverseIndex = data.reverseIndex || {};
+                console.log(`[Worker] Imported index: ${Object.keys(fileStats).length} files`);
+            }
             break;
     }
 };

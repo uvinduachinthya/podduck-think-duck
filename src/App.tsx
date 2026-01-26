@@ -18,49 +18,35 @@ import {
     MoreHorizontal,
     X
 } from 'lucide-react';
-import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
-import Document from '@tiptap/extension-document';
-import StarterKit from '@tiptap/starter-kit';
+import { CodeMirrorEditor } from './components/editor/CodeMirrorEditor';
 import { Settings } from './components/Settings';
 
-import { Backlink } from './editor/extensions/Backlink';
-import { CollapsibleListItem } from './editor/extensions/CollapsibleListItem';
-import { EmojiExtension, EmojiSuggestionOptions } from './editor/extensions/EmojiExtension';
-import { SlashCommandExtension, SlashCommandOptions } from './editor/extensions/SlashCommandExtension';
-import { AutoCloseExtension } from './editor/extensions/AutoCloseExtension';
-
 import { DailyNotesCalendar } from './components/DailyNotesCalendar';
-import Image from '@tiptap/extension-image';
 import { SmoothCursor } from './components/SmoothCursor';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { ImageNodeView } from './components/ImageNodeView';
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog';
 import { SearchModal } from './components/SearchModal';
-import { searchItems, type SearchableItem } from './utils/searchIndex';
 import { Virtuoso } from 'react-virtuoso';
 import origamiDucklings from './assets/origami-ducklings.webp';
 import origamiDucklingsDark from './assets/origami-ducklings-dark.webp';
 import { useTheme } from './context/ThemeContext';
 import { BrowserNotSupported } from './components/BrowserNotSupported';
 
-
 import { FileSystemProvider, useFileSystem, FileSystemContext, type FileNode } from './context/FileSystemContext';
-import { BacklinkNode } from './components/BacklinkNode';
 import { UpdatePopup } from './components/UpdatePopup';
 import { APP_VERSION } from './version';
 
 // Editor Component starts here
 
-// JSON-based Tiptap Editor Component
-function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemFileHandle; onSave: (content: string) => void; onEditorReady?: (editor: any) => void }) {
-    const [isLoading, setIsLoading] = useState(true);
-    const [initialContent, setInitialContent] = useState<any>(null);
-    const saveTimeoutRef = useRef<any>(null);
-    const editorRef = useRef<any>(null);
-    const { files, selectFile, createNewNote } = useFileSystem();
+// Editor Component starts here
 
-    // Load JSON from file
+function Editor({ fileHandle, onSave, onEditorReady, onNavigate, scrollToId, addBlockIdToFile }: { fileHandle: FileSystemFileHandle; onSave: (content: string) => void; onEditorReady?: (editor: any) => void; onNavigate: (target: string) => void; scrollToId?: string | null; addBlockIdToFile?: (filename: string, blockText: string) => Promise<string | null> }) {
+    const [isLoading, setIsLoading] = useState(true);
+    const [content, setContent] = useState('');
+    const saveTimeoutRef = useRef<any>(null);
+
+    // Load File
     useEffect(() => {
         let mounted = true;
         const loadFile = async () => {
@@ -68,477 +54,39 @@ function Editor({ fileHandle, onSave, onEditorReady }: { fileHandle: FileSystemF
                 setIsLoading(true);
                 const file = await fileHandle.getFile();
                 const text = await file.text();
-
                 if (mounted) {
-                    if (text.trim()) {
-                        try {
-                            const json = JSON.parse(text);
-
-                            // Process JSON to convert [[text]] to backlink nodes
-                            const processContent = (nodes: any[]): any[] => {
-                                return nodes.map(node => {
-                                    if (node.type === 'text' && node.text) {
-                                        // Regex to find [[text]]
-                                        const regex = /\[\[([^\]]+)\]\]/g;
-                                        const parts = [];
-                                        let lastIndex = 0;
-                                        let match;
-
-                                        while ((match = regex.exec(node.text)) !== null) {
-                                            // Add preceding text
-                                            if (match.index > lastIndex) {
-                                                parts.push({
-                                                    type: 'text',
-                                                    text: node.text.substring(lastIndex, match.index)
-                                                });
-                                            }
-
-                                            // Add backlink node
-                                            parts.push({
-                                                type: 'backlink',
-                                                attrs: {
-                                                    label: match[1],
-                                                    pageId: match[1],
-                                                    type: 'page'
-                                                }
-                                            });
-
-                                            lastIndex = regex.lastIndex;
-                                        }
-
-                                        // Add remaining text
-                                        if (lastIndex < node.text.length) {
-                                            parts.push({
-                                                type: 'text',
-                                                text: node.text.substring(lastIndex)
-                                            });
-                                        }
-
-                                        return parts.length > 0 ? parts : [node];
-                                    }
-
-                                    if (node.content) {
-                                        return { ...node, content: processContent(node.content) };
-                                    }
-
-                                    return node;
-                                }).flat();
-                            };
-
-                            if (json.content) {
-                                json.content = processContent(json.content);
-                            }
-
-                            setInitialContent(json);
-                        } catch (e) {
-                            console.error('[Editor] Invalid JSON, starting fresh');
-                            setInitialContent({
-                                type: 'doc',
-                                content: [{
-                                    type: 'bulletList',
-                                    content: [{
-                                        type: 'listItem',
-                                        content: [{ type: 'paragraph' }]
-                                    }]
-                                }]
-                            });
-                        }
-                    } else {
-                        setInitialContent({
-                            type: 'doc',
-                            content: [{
-                                type: 'bulletList',
-                                content: [{
-                                    type: 'listItem',
-                                    content: [{ type: 'paragraph' }]
-                                }]
-                            }]
-                        });
-                    }
+                    setContent(text);
                 }
             } catch (err) {
                 console.error('[Editor] Error loading:', err);
-                if (mounted) {
-                    setInitialContent({
-                        type: 'doc',
-                        content: [{
-                            type: 'bulletList',
-                            content: [{
-                                type: 'listItem',
-                                content: [{ type: 'paragraph' }]
-                            }]
-                        }]
-                    });
-                }
             } finally {
-                if (mounted) {
-                    setIsLoading(false);
-                }
+                if (mounted) setIsLoading(false);
             }
         };
-
         loadFile();
-
-        return () => {
-            mounted = false;
-        };
+        return () => { mounted = false; };
     }, [fileHandle]);
 
-    // Initialize Tiptap editor - bullets only
-    const editor = useEditor({
-        extensions: [
-            Document.extend({
-                content: 'bulletList',
-            }),
-            StarterKit.configure({
-                document: false,
-                heading: false,
-                blockquote: false,
-                codeBlock: false,
-                horizontalRule: false,
-                listItem: false,
-                bulletList: {
-                    HTMLAttributes: {
-                        class: 'block-bullet-list',
-                    },
-                },
-            }),
-            CollapsibleListItem,
-            EmojiExtension.configure({
-                suggestion: EmojiSuggestionOptions,
-            }),
-            SlashCommandExtension.configure({
-                suggestion: SlashCommandOptions,
-            }),
-            Backlink.extend({
-                addNodeView() {
-                    return ReactNodeViewRenderer(BacklinkNode);
-                },
-            }).configure({
-                HTMLAttributes: {
-                    class: 'backlink',
-                },
-                renderLabel({ node }) {
-                    return `[[${node.attrs.label || ''}]]`;
-                },
-                onNavigate: async (pageId: string) => {
-                    const targetFile = files.find(f => f.name === `${pageId}.json` || f.name === pageId);
+    const handleChange = useCallback((val: string) => {
+        setContent(val);
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = setTimeout(() => {
+            onSave(val);
+        }, 500);
+    }, [onSave]);
 
-                    if (targetFile) {
-                        selectFile(targetFile);
-                    } else {
-                        // Lazy creation: Create file if it doesn't exist
-                        console.log(`[Backlink] Lazy creating note: ${pageId}`);
-                        await createNewNote(pageId);
-                        // createNewNote automatically sets the current file if successful
-                    }
-                },
-                suggestion: {
-                    char: '[',
-                    allowSpaces: true,
-                    command: async ({ editor, range, props }: { editor: any, range: any, props: any }) => {
-                        const item = props as SearchableItem;
-
-                        // Immediate creation for both phantom and create-new
-                        if (item.type === 'phantom' && item.pageId) {
-                            await createNewNote(item.pageId, false);
-                        } else if (item.type === 'create-new' && item.query) {
-                            await createNewNote(item.query, false);
-                        }
-
-                        const label = item.type === 'create-new' ? item.query : (item.type === 'phantom' ? item.pageId : item.title);
-                        const pageId = item.type === 'create-new' ? item.query : item.pageId;
-
-                        // Check for trailing ']' or ']]' after the range
-                        // The range covers the trigger '[' and the query
-                        let to = range.to;
-                        const doc = editor.state.doc;
-                        const nextChar = doc.textBetween(to, Math.min(to + 1, doc.content.size));
-                        if (nextChar === ']') {
-                            to += 1;
-                            const nextNextChar = doc.textBetween(to, Math.min(to + 1, doc.content.size));
-                            if (nextNextChar === ']') {
-                                to += 1;
-                            }
-                        }
-
-                        editor
-                            .chain()
-                            .focus()
-                            .insertContentAt({ from: range.from, to: to }, [
-                                {
-                                    type: 'backlink',
-                                    attrs: {
-                                        id: item.type === 'block' ? item.id : undefined,
-                                        label: label,
-                                        type: item.type === 'block' ? 'block' : 'page',
-                                        pageId: pageId,
-                                    },
-                                },
-                                {
-                                    type: 'text',
-                                    text: ' ',
-                                },
-                            ])
-                            .run();
-                    },
-                    items: ({ query }: { query: string }) => {
-                        if (query.startsWith('[')) {
-                            // Close if query contains a closing bracket (end of backlink)
-                            if (query.includes(']')) {
-                                return [];
-                            }
-
-                            const realQuery = query.substring(1);
-                            const results = searchItems(realQuery);
-
-                            // 1. If query is empty, return empty array (don't show recent files to avoid trapping Enter)
-                            if (!realQuery.trim()) {
-                                return [];
-                            }
-
-                            // 2. Check if exact match exists
-                            const exactMatch = results.find(r => r.title.toLowerCase() === realQuery.toLowerCase() && r.type === 'page');
-
-                            if (exactMatch) {
-                                return results;
-                            } else {
-                                // 3. Prepend "Create new" option if query is valid
-                                return [
-                                    {
-                                        type: 'create-new',
-                                        id: `create-${realQuery}`,
-                                        title: realQuery,
-                                        pageName: '',
-                                        lastModified: Date.now(),
-                                        query: realQuery
-                                    } as any,
-                                    ...results
-                                ];
-                            }
-                        }
-                        return [];
-                    },
-                    render: () => {
-                        let component: any;
-                        let popup: any;
-                        return {
-                            onStart: async (props: any) => {
-                                const { ReactRenderer } = await import('@tiptap/react');
-                                const { BacklinkSuggestions } = await import('./components/BacklinkSuggestions');
-                                const tippy = (await import('tippy.js')).default;
-                                component = new ReactRenderer(BacklinkSuggestions, { props, editor: props.editor });
-                                if (!props.clientRect) return;
-                                popup = tippy('body', {
-                                    getReferenceClientRect: props.clientRect,
-                                    appendTo: () => document.body,
-                                    content: component.element,
-                                    showOnCreate: true,
-                                    interactive: true,
-                                    trigger: 'manual',
-                                    placement: 'bottom-start',
-                                });
-                            },
-                            onUpdate(props: any) {
-                                component.updateProps(props);
-                                if (!props.clientRect) return;
-
-                                // Force hide if query contains closing bracket
-                                if (props.query.includes(']')) {
-                                    popup[0].hide();
-                                    return;
-                                }
-
-                                popup[0].setProps({ getReferenceClientRect: props.clientRect });
-                            },
-                            onKeyDown(props: any) {
-                                if (props.event.key === 'Escape') {
-                                    popup[0].hide();
-                                    return true;
-                                }
-                                return component.ref?.onKeyDown(props) ?? false;
-                            },
-                            onExit() {
-                                popup[0].destroy();
-                                component.destroy();
-                            },
-                        };
-                    },
-                },
-            }),
-            Image.configure({
-                allowBase64: true,
-                inline: true,
-            }).extend({
-                addNodeView() {
-                    return ReactNodeViewRenderer(ImageNodeView)
-                },
-            }),
-            AutoCloseExtension,
-        ],
-        content: initialContent,
-        editorProps: {
-            scrollThreshold: 40,
-            scrollMargin: 40,
-            attributes: {
-                class: 'tiptap block-outliner',
-            },
-            handlePaste: (_view, event, _slice) => {
-                const items = Array.from(event.clipboardData?.items || []);
-                const imageItem = items.find(item => item.type.indexOf('image') === 0);
-
-                if (imageItem) {
-                    event.preventDefault();
-                    const file = imageItem.getAsFile();
-                    if (!file) return false;
-
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        const result = e.target?.result;
-                        if (typeof result === 'string' && editorRef.current) {
-                            const editor = editorRef.current;
-                            const { state } = editor;
-                            const { selection } = state;
-                            const { $from } = selection;
-
-                            // Check if the current list item is empty
-                            const isEmpty = $from.parent.content.size === 0;
-
-                            // 1. Prepare space if needed
-                            if (!isEmpty) {
-                                editor.chain().splitListItem('listItem').run();
-                            }
-
-                            // 2. Insert image
-                            editor.chain().insertContent({
-                                type: 'image',
-                                attrs: { src: result }
-                            }).run();
-
-                            // 3. Create new bullet after image (delayed for stability)
-                            setTimeout(() => {
-                                if (editor && !editor.isDestroyed) {
-                                    editor.chain()
-                                        .focus()
-                                        .splitListItem('listItem')
-                                        .run();
-                                }
-                            }, 50);
-                        }
-                    };
-                    reader.readAsDataURL(file);
-                    return true;
-                }
-                return false;
-            },
-            handleTextInput: (view) => {
-                const { state } = view;
-                const { selection } = state;
-                const { $from } = selection;
-
-                // Check if the current parent node has any image children
-                let hasImage = false;
-                $from.parent.forEach((node) => {
-                    if (node.type.name === 'image') {
-                        hasImage = true;
-                    }
-                });
-
-                if (hasImage) {
-                    return true; // Block input
-                }
-                return false; // Allow input
-            },
-        },
-        onCreate: ({ editor }) => {
-            editorRef.current = editor;
-            if (onEditorReady) {
-                onEditorReady(editor);
-            }
-        },
-        onUpdate: ({ editor }) => {
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-            }
-            saveTimeoutRef.current = setTimeout(() => {
-                try {
-                    const json = editor.getJSON();
-                    onSave(JSON.stringify(json, null, 2));
-                } catch (err) {
-                    console.error('[Editor] Error saving:', err);
-                }
-            }, 500);
-        },
-    }, [initialContent]);
-
-    // Update editor content when file changes
-    useEffect(() => {
-        if (editor && !isLoading && initialContent) {
-            editor.commands.setContent(initialContent);
-            requestAnimationFrame(() => {
-                if (!editor.isDestroyed) {
-                    editor.commands.focus('end');
-                }
-            });
-        }
-    }, [editor, initialContent, isLoading]);
-
-    // Cleanup
-    useEffect(() => {
-        return () => {
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-            }
-            editor?.destroy();
-        };
-    }, [editor]);
-
-    // Keyboard shortcuts for New Note
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            // Check for Ctrl/Cmd + N
-            const isCtrlOrCmd = e.ctrlKey || e.metaKey;
-            const isN = e.key.toLowerCase() === 'n';
-
-            if (isCtrlOrCmd && isN) {
-                // Handle Shift+Ctrl+N (New Window/Tab)
-                if (e.shiftKey) {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    const newNoteName = getNextQuackNoteName(files);
-
-                    // Create note WITHOUT switching to it
-                    createNewNote(newNoteName, false);
-
-                    // Open in new window using defined format
-                    openNoteInPopup(newNoteName);
-                    return;
-                }
-
-                // Handle Ctrl+N (Current Window)
-                // Critical: Stop browser from opening new window
-                e.preventDefault();
-                e.stopPropagation();
-
-                const newNoteName = getNextQuackNoteName(files);
-                createNewNote(newNoteName);
-            }
-        };
-
-        // Attach to window with capture: true to intercept before browser
-        window.addEventListener('keydown', handleKeyDown, { capture: true });
-        return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-    }, [files, createNewNote]);
-
-    if (isLoading) {
-        return <div style={{ padding: '20px' }}>Loading...</div>;
-    }
+    if (isLoading) return <div style={{ padding: '20px' }}>Loading...</div>;
 
     return (
-        <div style={{ width: '100%', height: '100%' }}>
-            <EditorContent editor={editor} />
-        </div>
+        <CodeMirrorEditor
+            content={content}
+            fileName={fileHandle.name}
+            onChange={handleChange}
+            onEditorReady={onEditorReady}
+            onNavigate={onNavigate}
+            scrollToId={scrollToId}
+            addBlockIdToFile={addBlockIdToFile}
+        />
     );
 }
 
@@ -652,23 +200,7 @@ const InlineRenameInput = ({
 
 
 
-// Helper to get next Quack note name
-function getNextQuackNoteName(files: any[]) {
-    const baseName = 'Quack note';
-    const baseExists = files.some(f => f.name === `${baseName}.json`);
 
-    if (!baseExists) return baseName;
-
-    const existingNumbers = files
-        .map(f => {
-            const match = f.name.match(/^Quack note (\d+)\.json$/);
-            return match ? parseInt(match[1], 10) : 0;
-        })
-        .filter(n => n > 0);
-
-    const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
-    return `${baseName} ${nextNumber}`;
-}
 
 // Helper to open note in a centered popup window
 function openNoteInPopup(filename: string) {
@@ -695,7 +227,7 @@ function getPreviewText(node: any): string {
 // Helper function to detect daily notes (YYYY-MM-DD pattern or "October 20th, 2025" pattern)
 // Exported or just module-level to be shared between Sidebar and MainContent
 function isDailyNote(filename: string): boolean {
-    const nameWithoutExt = filename.replace('.json', '');
+    const nameWithoutExt = filename.replace('.md', '');
     // Match YYYY-MM-DD
     if (/^\d{4}-\d{2}-\d{2}$/.test(nameWithoutExt)) return true;
     // Match "October 20th, 2025"
@@ -788,7 +320,7 @@ const SidebarItem = React.memo(({ file, context }: { file: FileNode; context: an
                                 />
                             ) : (
                                 <span className="sidebar-note-title">
-                                    {file.name.replace('.json', '')}
+                                    {file.name.replace('.md', '')}
                                 </span>
                             )}
                         </div>
@@ -978,7 +510,7 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
 
     const startEditing = (file: FileNode) => {
         setEditingFileId(file.name);
-        setEditValue(file.name.replace('.json', ''));
+        setEditValue(file.name.replace('.md', ''));
     };
 
     const cancelRename = () => {
@@ -993,7 +525,7 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
         }
 
         const cleanName = newValue.trim();
-        const newFileName = cleanName.endsWith('.json') ? cleanName : `${cleanName}.json`;
+        const newFileName = cleanName.endsWith('.md') ? cleanName : `${cleanName}.md`;
 
         // Skip if name hasn't changed
         if (newFileName === editingFileId) {
@@ -1125,14 +657,14 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
                             const baseName = 'Quack note';
 
                             // Check if base exists
-                            const baseExists = files.some(f => f.name === `${baseName}.json`);
+                            const baseExists = files.some(f => f.name === `${baseName}.md`);
 
                             if (!baseExists) {
                                 createNewNote(baseName);
                             } else {
                                 const existingNumbers = files
                                     .map(f => {
-                                        const match = f.name.match(/^Quack note (\d+)\.json$/);
+                                        const match = f.name.match(/^Quack note (\d+)\.md$/);
                                         return match ? parseInt(match[1], 10) : 0;
                                     })
                                     .filter(n => n > 0);
@@ -1184,7 +716,7 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
             {/* Delete Confirmation Dialog */}
             <DeleteConfirmDialog
                 isOpen={!!deleteCandidate}
-                fileName={deleteCandidate?.replace('.json', '') || ''}
+                fileName={deleteCandidate?.replace('.md', '') || ''}
                 onConfirm={confirmDelete}
                 onCancel={cancelDelete}
             />
@@ -1222,20 +754,22 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
 
 
 function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, onSearchClick }: { isSidebarOpen: boolean; toggleSidebar: () => void; showSidebarToggle?: boolean; onSearchClick: () => void }) {
-    const { currentFile, saveFile, files, openDateNote, deleteFile, renameFile, openDirectory } = useFileSystem();
+    const { currentFile, saveFile, files, openDateNote, deleteFile, renameFile, openDirectory, selectFile, addBlockIdToFile } = useFileSystem();
     const { theme } = useTheme();
+
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [currentEditor, setCurrentEditor] = useState<any>(null);
     const [showCalendar, setShowCalendar] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null);
+    const [pendingScrollTarget, setPendingScrollTarget] = useState<string | null>(null);
     const titleInputRef = useRef<HTMLInputElement>(null);
 
     // Existing Note Dates for Calendar
     const existingNoteDates = files
         .map(f => {
-            const name = f.name.replace('.json', '');
+            const name = f.name.replace('.md', '');
             if (/^\d{4}-\d{2}-\d{2}$/.test(name)) return name;
 
             // Try parsing "October 20th, 2025"
@@ -1255,7 +789,7 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
 
     useEffect(() => {
         if (currentFile) {
-            setEditedTitle(currentFile.name.replace('.json', ''));
+            setEditedTitle(currentFile.name.replace('.md', ''));
         }
     }, [currentFile]);
 
@@ -1282,9 +816,9 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
             // Editor passes STRING.
             // So handleSave must PARSE string -> object.
             try {
-                await saveFile(currentFile.handle, JSON.parse(content));
+                await saveFile(currentFile.handle, content);
             } catch (e) {
-                console.error("Error saving parsing JSON", e);
+                console.error("Error saving file", e);
             }
         }
     }, [currentFile, saveFile]);
@@ -1292,7 +826,7 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
 
     const handleTitleBlur = () => {
         setIsEditingTitle(false);
-        if (currentFile && editedTitle.trim() && editedTitle !== currentFile.name.replace('.json', '')) {
+        if (currentFile && editedTitle.trim() && editedTitle !== currentFile.name.replace('.md', '')) {
             renameFile(currentFile.name, editedTitle.trim());
         }
     };
@@ -1416,7 +950,7 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                 {/* Calendar Button - Only show if current file is a daily note */}
                 {currentFile && (
                     isDailyNote(currentFile.name) ||
-                    /^\d{4}-\d{2}-\d{2}$/.test(currentFile.name.replace('.json', ''))
+                    /^\d{4}-\d{2}-\d{2}$/.test(currentFile.name.replace('.md', ''))
                 ) && (
                         <div style={{ position: 'relative' }}>
                             <button
@@ -1536,7 +1070,7 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                                 className="note-title"
                                 style={{ cursor: 'text' }}
                             >
-                                {currentFile.name.replace('.json', '')}
+                                {currentFile.name.replace('.md', '')}
                             </h1>
                         )}
                     </div>
@@ -1547,6 +1081,27 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                             fileHandle={currentFile.handle}
                             onSave={handleSave}
                             onEditorReady={setCurrentEditor}
+                            scrollToId={pendingScrollTarget} // Pass the target block ID
+                            addBlockIdToFile={addBlockIdToFile}
+                            onNavigate={(target) => {
+                                // Target format: "PageName" or "PageName#^blockId" or "#^blockId" (internal)
+                                const [pageName, blockId] = target.split('#');
+                                
+                                // Find the file
+                                let targetFile;
+                                if (!pageName) {
+                                    targetFile = currentFile;
+                                } else {
+                                    targetFile = files.find(f => f.name === `${pageName}.md` || f.name === pageName);
+                                }
+
+                                if (targetFile) {
+                                    setPendingScrollTarget(blockId ? blockId.replace('^', '') : null); // Store pending scroll
+                                    selectFile(targetFile);
+                                } else {
+                                    console.warn("Target file not found:", pageName);
+                                }
+                            }}
                         />
 
                         <SmoothCursor editor={currentEditor} />
@@ -1558,7 +1113,7 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
             {/* Delete Confirmation Dialog */}
             <DeleteConfirmDialog
                 isOpen={!!deleteCandidate}
-                fileName={deleteCandidate?.replace('.json', '') || ''}
+                fileName={deleteCandidate?.replace('.md', '') || ''}
                 onConfirm={confirmDelete}
                 onCancel={cancelDelete}
             />
@@ -1572,12 +1127,9 @@ export default function App() {
     // Check for browser support
     const isSupported = 'showDirectoryPicker' in window;
 
-    if (!isSupported) {
-        return <BrowserNotSupported />;
-    }
-
     const isPopup = new URLSearchParams(window.location.search).get('mode') === 'popup';
-
+    
+    // Hooks must be called unconditionally
     const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
         if (isPopup) return false;
         const saved = localStorage.getItem('sidebarOpen');
@@ -1643,6 +1195,10 @@ export default function App() {
         setIsSettingsOpen(false);
     };
 
+    if (!isSupported) {
+        return <BrowserNotSupported />;
+    }
+
     return (
         <FileSystemProvider>
             <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
@@ -1657,8 +1213,8 @@ export default function App() {
                         isOpen={isSearchOpen}
                         onClose={() => setIsSearchOpen(false)}
                         search={context?.search ?? (async () => [])}
-                        onNavigate={(pageId, _blockId) => {
-                            const file = context?.files.find(f => f.name === `${pageId}.json` || f.name === pageId);
+                        onNavigate={(pageId) => {
+                            const file = context?.files.find(f => f.name === `${pageId}.md` || f.name === pageId);
                             if (file) {
                                 context?.selectFile(file);
                                 // TODO: Handle block scroll (Requires stable block IDs in document)

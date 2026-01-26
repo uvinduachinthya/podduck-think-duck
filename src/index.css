@@ -180,6 +180,23 @@ a:visited {
     color: var(--primary-color);
 }
 
+.cm-md-link, .cm-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.cm-md-link:hover, .cm-link:hover {
+    text-decoration: underline;
+}
+
+/* Debug style to see if widget is rendered */
+span.cm-md-link {
+    /* background-color: rgba(79, 101, 242, 0.1); */
+    /* border-radius: 4px; */
+    padding: 0 1px; /* Minimal padding */
+}
+
 /* Button and Clickable Elements */
 button {
     cursor: pointer;
@@ -1164,4 +1181,197 @@ emoji-picker::-webkit-scrollbar-button {
 .context-menu-item:hover {
     background-color: var(--sidebar-hover);
     outline: none;
+}/* Appending styles */
+
+/* CodeMirror Editor Styles */
+
+/* Base Styles */
+.cm-cursor, .cm-dropCursor {
+    display: none !important; /* Hide native cursor in favor of smooth cursor */
+}
+
+/* Focused selection */
+.cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+.cm-selectionBackground,
+.cm-content ::selection {
+    background-color: var(--primary-faded) !important;
+}
+
+.cm-activeLine {
+    background-color: transparent !important;
+}
+
+.cm-gutters {
+    background-color: var(--bg-primary) !important;
+    color: var(--text-muted) !important;
+    border: none !important;
+}
+
+/* Markdown Headers */
+.cm-header {
+    font-weight: 600 !important;
+    color: var(--text-primary);
+    margin-top: 24px;
+    margin-bottom: 16px;
+    line-height: 1.25;
+}
+
+.cm-header-1 { 
+    font-size: 2em; 
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.3em;
+}
+
+.cm-header-2 { 
+    font-size: 1.6em; 
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.3em;
+}
+
+.cm-header-3 { font-size: 1.4em; }
+.cm-header-4 { font-size: 1.2em; }
+.cm-header-5 { font-size: 1.1em; color: var(--text-secondary); }
+.cm-header-6 { font-size: 1.0em; color: var(--text-secondary); }
+
+/* Blockquotes */
+.cm-blockquote {
+    padding-left: 1em;
+    border-left: 3px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.cm-quote {
+    border-left: 0.25em solid #dfe2e5;
+    padding: 0 1em;
+    color: #6a737d;
+    font-style: normal;
+    display: block;
+    width: 100%;
+    margin: 1em 0;
+}
+
+/* Links */
+.cm-link, .cm-link *, .cm-url, .cm-md-link, .cm-md-link * {
+    color: var(--primary-color) !important; /* Force primary color for all link types and children */
+    text-decoration: none;
+    cursor: pointer;
+    font-weight: 400;
+}
+
+.cm-link:hover, .cm-md-link:hover, .cm-url:hover {
+    text-decoration: underline;
+    color: var(--primary-hover) !important;
+}
+
+/* Bullet Points */
+.bullet-point {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5em;
+    height: 1.5em;
+    vertical-align: middle;
+    cursor: pointer;
+    color: var(--primary-color);
+    margin-right: 4px;
+    border-radius: 50%;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.bullet-point:hover {
+     background-color: rgba(0, 0, 0, 0.05);
+     color: var(--primary-hover);
+}
+
+.bullet-dot {
+    width: 6px;
+    height: 6px;
+    background-color: currentColor;
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+/* Indentation Guides */
+.cm-indent-guide {
+     display: inline-block;
+     position: relative;
+     width: 1.5em; 
+     text-align: center;
+     vertical-align: middle;
+}
+
+.cm-indent-guide::before {
+     content: "";
+     position: absolute;
+     top: -0.3em;
+     bottom: -0.3em;
+     left: 50%;
+     border-left: 1px solid var(--border-color);
+     opacity: 0.5;
+     pointer-events: none;
+     transform: translateX(-50%);
+}
+
+/* Standard Markdown Styles */
+.cm-bold { font-weight: 700; }
+.cm-italic { font-style: italic; }
+.cm-strike { text-decoration: line-through; color: var(--text-muted); }
+
+.cm-code {
+     background-color: rgba(175, 184, 193, 0.2);
+     padding: 0.2em 0.4em;
+     border-radius: 6px;
+     font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+     font-size: 85%;
+     color: var(--text-primary);
+}
+
+.cm-hr {
+     height: 0.25em;
+     padding: 0;
+     margin: 24px 0;
+     background-color: var(--border-color);
+     border: 0;
+     display: block;
+}
+
+.cm-image-widget {
+     display: block;
+     margin: 0.5em 0;
+     max-width: 100%;
+     border-radius: 8px;
+     cursor: default;
+}
+
+/* Stable Markdown Link Class */
+.cm-md-link {
+    color: var(--primary-color) !important;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.cm-md-link:hover {
+    text-decoration: underline;
+    color: var(--primary-hover) !important;
+}
+
+
+/* Block ID Styling */
+.cm-block-id-outer {
+    /* Isolate layout to prevent cursor from inheriting line-height/alignment */
+    unicode-bidi: isolate; 
+}
+
+.cm-block-id {
+    font-size: 0.75em;
+    color: var(--text-muted);
+    vertical-align: super;
+    user-select: none;
+    pointer-events: none;
+    margin-left: 0.5em;
+    opacity: 0.6;
+}
+
+.cm-block-id-hidden {
+    display: none;
 }

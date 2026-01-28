@@ -2,7 +2,7 @@ import './index.css'
 import React, { useRef, useState, useEffect, useCallback, useMemo, useReducer } from 'react';
 import { format, isToday, isYesterday, isThisWeek, isThisYear, differenceInMinutes, parse } from 'date-fns';
 import {
-    Folder,
+
     FilePlus as AddIcon,
     Settings as SettingsIcon,
     Calendar as CalendarIcon,
@@ -15,8 +15,7 @@ import {
     ExternalLink as NewTabIcon,
     AppWindow as NewWindowIcon,
     MoreVertical,
-    MoreHorizontal,
-    X
+    MoreHorizontal
 } from 'lucide-react';
 import { CodeMirrorEditor } from './components/editor/CodeMirrorEditor';
 import { Settings } from './components/Settings';
@@ -501,10 +500,9 @@ const SidebarItem = React.memo(({ file, context }: { file: FileNode; context: an
     );
 });
 function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick: () => void }) {
-    const { folderName, files, currentFile, rootHandle, openDirectory, selectFile, createNewNote, openDailyNoteManually, renameFile, deleteFile } = useFileSystem();
+    const { folderName, files, currentFile, rootHandle, createNewNote, selectFile, openDailyNoteManually, renameFile, deleteFile } = useFileSystem();
     const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null);
     const [editingFileId, setEditingFileId] = useState<string | null>(null);
-    const [isFolderMenuOpen, setIsFolderMenuOpen] = useState(false);
     const [showCloseFolderConfirm, setShowCloseFolderConfirm] = useState(false);
     const [editValue, setEditValue] = useState('');
 
@@ -579,63 +577,7 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
                 marginLeft: isOpen ? '0' : 'calc(-1 * var(--sidebar-width))'
             }}
         >
-            <div className="sidebar-header" style={{ cursor: 'default', position: 'relative' }}>
-                <Folder className="w-[18px] h-[18px]" style={{ width: '18px', height: '18px' }} />
-                <span style={{ fontWeight: 500 }}>{folderName || 'No Folder'}</span>
-                {rootHandle && (
-                    <>
-                        <button
-                            onClick={() => setIsFolderMenuOpen(!isFolderMenuOpen)}
-                            className="icon-btn"
-                            style={{
-                                marginLeft: 'auto',
-                                padding: '4px',
-                            }}
-                            title="Folder options"
-                        >
-                            <MoreVertical className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
-                        </button>
-                        {isFolderMenuOpen && (
-                            <>
-                                <div
-                                    style={{
-                                        position: 'fixed',
-                                        top: 0,
-                                        left: 0,
-                                        right: 0,
-                                        bottom: 0,
-                                        zIndex: 999,
-                                    }}
-                                    onClick={() => setIsFolderMenuOpen(false)}
-                                />
-                                <div className="dropdown-menu" style={{ top: '100%', right: '8px', left: 'auto' }}>
-                                    <div
-                                        onClick={() => {
-                                            openDirectory();
-                                            setIsFolderMenuOpen(false);
-                                        }}
-                                        className="dropdown-item"
-                                    >
-                                        <Folder className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
-                                        <span>Switch Folder</span>
-                                    </div>
-                                    <div
-                                        onClick={() => {
-                                            setShowCloseFolderConfirm(true);
-                                            setIsFolderMenuOpen(false);
-                                        }}
-                                        className="dropdown-item"
-                                        style={{ color: 'var(--danger-color, #ff4d4f)' }}
-                                    >
-                                        <X className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
-                                        <span>Close Folder</span>
-                                    </div>
-                                </div>
-                            </>
-                        )}
-                    </>
-                )}
-            </div>
+
 
 
 

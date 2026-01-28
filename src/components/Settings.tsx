@@ -1,71 +1,91 @@
-import { X, Sun, Type, RotateCcw } from 'lucide-react';
-import { useState } from 'react';
+import { X, Sun, Type, RotateCcw, HardDrive } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import logo from '../assets/thinkduck-logo.png';
 import { AboutIcon } from './AboutIcon';
 import { APP_VERSION } from '../version';
+import * as Dialog from '@radix-ui/react-dialog';
+import * as Tabs from '@radix-ui/react-tabs';
+import * as Slider from '@radix-ui/react-slider';
+import { useFileSystem } from '../context/FileSystemContext';
 
 interface SettingsProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
-type SettingsSection = 'theme' | 'typography' | 'about';
-
 export function Settings({ isOpen, onClose }: SettingsProps) {
-    const [activeSection, setActiveSection] = useState<SettingsSection>('theme');
-
-    if (!isOpen) return null;
-
     return (
-        <>
-            <div className="modal-overlay" onClick={onClose} />
+        <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
+            <Dialog.Portal>
+                <Dialog.Overlay className="modal-overlay" />
+                <Dialog.Content className="settings-modal" aria-describedby={undefined}>
+                    <Dialog.Title className="sr-only">Settings</Dialog.Title>
+                    <SettingsTabs />
+                </Dialog.Content>
+            </Dialog.Portal>
+        </Dialog.Root>
+    );
+}
 
-            <div className="settings-modal">
-                {/* Left Sidebar */}
-                <div className="settings-sidebar">
-                    <h2>Settings</h2>
-
-                    {/* Theme Section */}
-                    <div
-                        onClick={() => setActiveSection('theme')}
-                        className={`settings-nav-item ${activeSection === 'theme' ? 'active' : ''}`}
-                    >
+function SettingsTabs() {
+    return (
+        <Tabs.Root defaultValue="theme" orientation="vertical" style={{ display: 'flex', width: '100%', height: '100%' }}>
+            <Tabs.List className="settings-sidebar" aria-label="Settings tabs">
+                <h2>Settings</h2>
+                
+                <Tabs.Trigger value="theme" className="settings-nav-item" asChild>
+                    <button className="settings-tab-trigger">
                         <Sun className="w-[18px] h-[18px]" />
                         <span>Theme</span>
-                    </div>
+                    </button>
+                </Tabs.Trigger>
 
-                    {/* Typography Section */}
-                    <div
-                        onClick={() => setActiveSection('typography')}
-                        className={`settings-nav-item ${activeSection === 'typography' ? 'active' : ''}`}
-                    >
+                <Tabs.Trigger value="typography" className="settings-nav-item" asChild>
+                    <button className="settings-tab-trigger">
                         <Type className="w-[18px] h-[18px]" />
                         <span>Typography</span>
-                    </div>
+                    </button>
+                </Tabs.Trigger>
 
-                    {/* About Section */}
-                    <div
-                        onClick={() => setActiveSection('about')}
-                        className={`settings-nav-item ${activeSection === 'about' ? 'active' : ''}`}
-                    >
+                <Tabs.Trigger value="filesaves" className="settings-nav-item" asChild>
+                    <button className="settings-tab-trigger">
+                        <HardDrive className="w-[18px] h-[18px]" />
+                        <span>File Saves</span>
+                    </button>
+                </Tabs.Trigger>
+
+                <Tabs.Trigger value="about" className="settings-nav-item" asChild>
+                    <button className="settings-tab-trigger">
                         <AboutIcon style={{ width: 18, height: 18 }} />
                         <span>About</span>
-                    </div>
-                </div>
+                    </button>
+                </Tabs.Trigger>
+            </Tabs.List>
 
-                {/* Right Content Area */}
-                <div className="settings-content">
-                    <button onClick={onClose} className="settings-close-btn">
+            <div className="settings-content">
+                <Dialog.Close asChild>
+                    <button className="settings-close-btn" aria-label="Close">
                         <X className="w-6 h-6" />
                     </button>
+                </Dialog.Close>
 
-                    {activeSection === 'theme' && <ThemeSection />}
-                    {activeSection === 'typography' && <TypographySection />}
-                    {activeSection === 'about' && <AboutSection />}
-                </div>
+                <Tabs.Content value="theme" style={{ outline: 'none' }}>
+                    <ThemeSection />
+                </Tabs.Content>
+
+                <Tabs.Content value="typography" style={{ outline: 'none' }}>
+                    <TypographySection />
+                </Tabs.Content>
+
+                <Tabs.Content value="filesaves" style={{ outline: 'none' }}>
+                    <FileSavesSection />
+                </Tabs.Content>
+
+                <Tabs.Content value="about" style={{ height: '100%', outline: 'none' }}>
+                    <AboutSection />
+                </Tabs.Content>
             </div>
-        </>
+        </Tabs.Root>
     );
 }
 
@@ -209,33 +229,169 @@ function FontSizeSlider({ selectedSize, onSizeChange }: { selectedSize: number; 
 
     return (
         <div className="slider-root">
-            {/* Track */}
-            <div className="slider-track">
-                {/* Active Track */}
-                <div
-                    className="slider-fill"
-                    style={{ width: `${(selectedSize / 4) * 100}%` }}
+            <Slider.Root
+                className="slider-root-element"
+                value={[selectedSize]}
+                min={0}
+                max={4}
+                step={1}
+                onValueChange={(vals) => onSizeChange(vals[0])}
+                style={{ position: 'relative', display: 'flex', alignItems: 'center', userSelect: 'none', touchAction: 'none', height: '20px' }}
+            >
+                <Slider.Track className="slider-track" style={{ flexGrow: 1, position: 'relative', height: '4px', borderRadius: '2px', backgroundColor: 'var(--border-color)' }}>
+                    <Slider.Range className="slider-fill" style={{ position: 'absolute', height: '100%', borderRadius: 'inherit', backgroundColor: 'var(--primary-color)' }} />
+                </Slider.Track>
+                <Slider.Thumb
+                    className="slider-knob active"
+                    aria-label="Font size"
+                    style={{
+                        display: 'block',
+                        width: '16px',
+                        height: '16px',
+                        borderRadius: '50%',
+                        backgroundColor: 'var(--border-color)',
+                        border: '2px solid var(--bg-primary)',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
+                        cursor: 'grab'
+                    }}
                 />
-            </div>
+            </Slider.Root>
 
-            {/* Size Markers */}
-            <div className="slider-marks">
+             {/* Size Markers (Visual Only now, effectively) - Or clearer to position under the slider */}
+            <div className="slider-marks" style={{ marginTop: '4px' }}>
                 {sizes.map((size) => (
                     <div
                         key={size.value}
-                        onClick={() => onSizeChange(size.value)}
                         className="slider-mark-container"
+                        onClick={() => onSizeChange(size.value)}
+                        style={{ width: '0' }} // Let them position naturally
                     >
-                        {/* Circle Marker */}
-                        <div className={`slider-knob ${selectedSize === size.value ? 'active' : ''}`} />
-
-                        {/* Label */}
-                        <span className={`slider-label ${selectedSize === size.value ? 'active' : ''}`}>
-                            {size.label}
-                        </span>
+                        {/* We don't need the mark dot anymore as the slider thumb handles it, just labels */}
+                         <div style={{ position: 'relative', left: `${(size.value / 4) * 100}%` }}>
+                            {/* Ideally we'd position these absolutely along the track. 
+                                Since we replaced the custom slider implementation, we need to ensure the visual alignment matches.
+                                The Radix slider handles the input. The labels are just visual.
+                            */}
+                         </div>
                     </div>
                 ))}
             </div>
+             
+             {/* Better label rendering matching previous style */}
+             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
+                 {sizes.map((size) => (
+                     <span 
+                        key={size.value}
+                        onClick={() => onSizeChange(size.value)}
+                        style={{ 
+                            fontSize: '11px', 
+                            color: selectedSize === size.value ? 'var(--text-primary)' : 'var(--text-secondary)',
+                            fontWeight: selectedSize === size.value ? 600 : 400,
+                            cursor: 'pointer'
+                        }}
+                     >
+                        {size.label}
+                     </span>
+                 ))}
+             </div>
+        </div>
+    );
+}
+
+
+
+function FileSavesSection() {
+    const { folderName, openDirectory, closeDirectory } = useFileSystem();
+
+    return (
+        <div>
+            <h4 className="settings-section-title">File System</h4>
+            
+            <div style={{ 
+                backgroundColor: 'var(--bg-secondary)', 
+                padding: '20px', 
+                borderRadius: '8px',
+                border: '1px solid var(--border-color)'
+            }}>
+                <div style={{ marginBottom: '16px' }}>
+                    <label style={{ 
+                        display: 'block', 
+                        fontSize: '12px', 
+                        color: 'var(--text-secondary)', 
+                        marginBottom: '8px',
+                        fontWeight: 500
+                    }}>
+                        Current Location
+                    </label>
+                    <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '8px',
+                        fontSize: '14px',
+                        color: 'var(--text-primary)',
+                        fontWeight: 500
+                    }}>
+                        <HardDrive className="w-4 h-4" />
+                        <span>{folderName || 'No folder selected'}</span>
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px' }}>
+                    <button 
+                        onClick={() => openDirectory()}
+                        style={{
+                            padding: '8px 16px',
+                            backgroundColor: 'var(--bg-primary)',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '6px',
+                            color: 'var(--text-primary)',
+                            fontSize: '13px',
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                            transition: 'background-color 0.2s'
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--hover-bg)'}
+                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-primary)'}
+                    >
+                        Switch Folder
+                    </button>
+                    
+                    <button 
+                        onClick={() => closeDirectory()}
+                        disabled={!folderName}
+                        style={{
+                            padding: '8px 16px',
+                            backgroundColor: 'transparent',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '6px',
+                            color: folderName ? 'var(--text-primary)' : 'var(--text-muted)',
+                            fontSize: '13px',
+                            fontWeight: 500,
+                            cursor: folderName ? 'pointer' : 'not-allowed',
+                            opacity: folderName ? 1 : 0.6,
+                            transition: 'background-color 0.2s'
+                        }}
+                         onMouseOver={(e) => {
+                            if (folderName) e.currentTarget.style.backgroundColor = 'var(--hover-bg)'
+                         }}
+                         onMouseOut={(e) => {
+                            if (folderName) e.currentTarget.style.backgroundColor = 'transparent'
+                         }}
+                    >
+                        Close Folder
+                    </button>
+                </div>
+            </div>
+            
+            <p style={{ 
+                marginTop: '16px', 
+                fontSize: '13px', 
+                color: 'var(--text-secondary)', 
+                lineHeight: '1.5' 
+            }}>
+                Thinkduck saves your notes directly to your local file system. 
+                Use "Switch Folder" to open a different directory or "Close Folder" to disconnect safely.
+            </p>
         </div>
     );
 }

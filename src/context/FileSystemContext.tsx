@@ -17,6 +17,7 @@ export interface FileSystemContextType {
     currentFile: FileNode | null;
     rootHandle: FileSystemDirectoryHandle | null;
     openDirectory: () => Promise<void>;
+    closeDirectory: () => void;
     selectFile: (file: FileNode) => void;
     saveFile: (file: FileSystemFileHandle, content: any) => Promise<void>;
     createNewNote: (filename: string, shouldSwitch?: boolean) => Promise<void>;
@@ -142,7 +143,7 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
             const file = await fileHandle.getFile();
             if (file.size === 0) {
                 const writable = await fileHandle.createWritable();
-                await writable.write(`# ${format(today, 'MMMM do, yyyy')}\n\n`);
+                await writable.write('');
                 await writable.close();
             }
             await refreshFiles(handle);
@@ -185,6 +186,24 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
             console.error('Error opening directory:', err);
         }
     }, [refreshFiles, openDailyNote]);
+
+    const closeDirectory = useCallback(() => {
+        setRootHandle(null);
+        setFolderName(null);
+        setFiles([]);
+        setCurrentFile(null);
+        // Clear persistence if desired, or let it stick until explicit new open
+        // For "Close", we probably want to clear the 'root' from IndexedDB to prevent auto-reopen
+         const clearDb = async () => {
+            const request = window.indexedDB.open('ThinkDuckDB', 1);
+            request.onsuccess = (ev: any) => {
+                const db = ev.target.result;
+                const tx = db.transaction('folders', 'readwrite');
+                tx.objectStore('folders').delete('root');
+            };
+        };
+        clearDb();
+    }, []);
 
     // IndexedDB Restore
     useEffect(() => {
@@ -503,7 +522,7 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
     }, [rootHandle, refreshFiles]);
 
     return (
-        <FileSystemContext.Provider value={{ folderName, files, currentFile, rootHandle, openDirectory, selectFile, saveFile, createNewNote, renameFile, deleteFile, restoreFile, openDailyNoteManually, openDateNote, search: searchAsync, addBlockIdToFile }}>
+        <FileSystemContext.Provider value={{ folderName, files, currentFile, rootHandle, openDirectory, closeDirectory, selectFile, saveFile, createNewNote, renameFile, deleteFile, restoreFile, openDailyNoteManually, openDateNote, search: searchAsync, addBlockIdToFile }}>
             {children}
         </FileSystemContext.Provider>
     );

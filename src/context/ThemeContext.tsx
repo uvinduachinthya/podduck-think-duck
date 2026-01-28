@@ -51,8 +51,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
             root.style.setProperty('--sidebar-bg', '#1a1a1a');
             root.style.setProperty('--sidebar-text', '#e0e0e0');
             root.style.setProperty('--sidebar-text-muted', '#888888');
-            root.style.setProperty('--sidebar-hover', '#2a2a2a');
-            root.style.setProperty('--sidebar-active', '#333333');
+            root.style.setProperty('--sidebar-hover', '#333333'); // Was #2a2a2a
+            root.style.setProperty('--sidebar-active', '#444444'); // Was #333333
             root.style.setProperty('--sidebar-border', '#2a2a2a');
 
             // Editor colors (dark)

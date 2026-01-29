@@ -18,7 +18,7 @@ import { bulletListPlugin } from './extensions/BulletListPlugin';
 import { listGuidesPlugin } from './extensions/ListGuidesPlugin';
 import { searchEmojis, type EmojiItem } from '../../utils/emojiData';
 import { searchItems } from '../../utils/searchIndex';
-import { List, CheckSquare, Heading1, Heading2, Quote, Image } from 'lucide-react';
+import { List, CheckSquare, Heading1, Heading2, Quote, Image, Loader } from 'lucide-react';
 
 // --- Theme ---
 const editorTheme = EditorView.theme({
@@ -122,6 +122,37 @@ class ImageInlineWidget extends WidgetType {
     }
 }
 
+class LoadingWidget extends WidgetType {
+    toDOM() {
+        const span = document.createElement("span");
+        span.className = "cm-loading-widget";
+        span.style.display = "inline-flex";
+        span.style.alignItems = "center";
+        span.style.gap = "6px";
+        span.style.color = "var(--text-secondary)";
+        span.style.fontSize = "0.9em";
+        span.style.backgroundColor = "var(--bg-secondary)";
+        span.style.padding = "2px 6px";
+        span.style.borderRadius = "4px";
+        
+        // Simple spinner using SVG string
+        span.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="spin-animation"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg> Uploading...`;
+        
+        // Add spin animation style if not present
+        if (!document.getElementById('spin-style')) {
+            const style = document.createElement('style');
+            style.id = 'spin-style';
+            style.textContent = `
+                @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+                .spin-animation { animation: spin 1s linear infinite; }
+            `;
+            document.head.appendChild(style);
+        }
+
+        return span;
+    }
+}
+
 
 // --- Live Preview Plugins ---
 
@@ -182,6 +213,33 @@ function getImageDecorations(state: EditorState) {
             }
         }
     });
+    return Decoration.set(decorations, true);
+}
+
+const loadingDecorationsField = StateField.define<DecorationSet>({
+    create(state) {
+        return getLoadingDecorations(state);
+    },
+    update(decorations, tr) {
+        if (tr.docChanged || tr.selection) {
+            return getLoadingDecorations(tr.state);
+        }
+        return decorations;
+    },
+    provide: f => EditorView.decorations.from(f)
+});
+
+function getLoadingDecorations(state: EditorState) {
+    const decorations: Range<Decoration>[] = [];
+    const text = state.doc.toString();
+    // Use a simpler regex or exact match loop for stability
+    const regex = /!\[Uploading\.\.\.\]/g;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+        decorations.push(Decoration.replace({
+            widget: new LoadingWidget()
+        }).range(match.index, match.index + match[0].length));
+    }
     return Decoration.set(decorations, true);
 }
 
@@ -365,141 +423,25 @@ interface CodeMirrorEditorProps {
 export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, onNavigate, scrollToId, addBlockIdToFile }: CodeMirrorEditorProps) {
     const { saveAsset, getAssetUrl } = useFileSystem();
     
-    // Auto-save wrapper
-    const handleChange = useCallback((val: string) => {
-        onChange(val);
-    }, [onChange]);
-
-    const extensions = useMemo(() => [
-        markdown({ base: markdownLanguage, codeLanguages: languages }),
-        EditorView.lineWrapping,
-        EditorView.contentAttributes.of({ spellcheck: 'true', autocorrect: 'on', autocapitalize: 'on' }),
-        indentUnit.of("    "), // 4 spaces for indentation match standard assumption
-        EditorState.tabSize.of(4),
-        editorTheme,
-        EditorView.updateListener.of((update) => {
-             if (update.docChanged || update.selectionSet || update.viewportChanged || update.focusChanged) {
-                 // Dispatch event for React component to pick up
-                 update.view.dom.dispatchEvent(new Event('cm-update'));
-             }
-        }),
-        imageResolver.of(getAssetUrl),
-        EditorView.domEventHandlers({
-            paste: (event, view) => {
-                 const items = event.clipboardData?.items;
-                 if (items) {
-                     for (let i = 0; i < items.length; i++) {
-                         if (items[i].type.indexOf('image') !== -1) {
-                             event.preventDefault();
-                             const file = items[i].getAsFile();
-                             if (file) {
-                                 saveAsset(file).then(path => {
-                                     const { from, to } = view.state.selection.main;
-                                     const insertText = `![](${path})`;
-                                     view.dispatch({
-                                         changes: { from, to, insert: insertText },
-                                         selection: { anchor: from + insertText.length }
-                                     });
-                                 });
-                             }
-                         }
-                     }
-                 }
-            },
-            mousedown: (event) => {
-                 const target = event.target as HTMLElement;
-                 // Check if clicked element is a link or has parent
-                 const link = target.closest('.cm-link') || target.closest('.cm-md-link');
-                 // Check if it's a left click (button 0)
-                 if (link && event.button === 0) {
-                     // Check if user wants to EDIT (e.g. holding Alt)
-                     // If Alt is held, allow default behavior (cursor placement)
-                     if (event.altKey) return;
-
-                     event.preventDefault(); // Prevent cursor move/focus
-                     event.stopPropagation();
-                     
-                     const linkText = (link as HTMLElement).innerText; 
-                     const linkTarget = link.getAttribute('data-link-target');
-
-                     // 0. Check for data attribute (added by WikiLinkPlugin for both raw and widgets)
-                     if (linkTarget) {
-                         if (onNavigate) onNavigate(linkTarget);
-                         return;
-                     }
-                     
-                     // 1. WikiLink [[Target]] (Fallback for raw text without attribute if any)
-                     if (linkText.startsWith('[[') && linkText.endsWith(']]')) {
-                         const cleanTarget = linkText.replace(/^\[\[/, '').replace(/\]\]$/, '');
-                         if (onNavigate) onNavigate(cleanTarget);
-                         return;
-                     }
-
-                     // 2. Standard Markdown Link [Title](URL)
-                     // The .cm-link decoration covers the [Title](URL) part usually? 
-                     // Or just the URL part if it's .cm-url?
-                     // Actually, usually [Title](URL) is rendered differently defined by decorations.
-                     // But if we clicked .cm-link, let's try to extract URL.
-                     // If it's a URL-like string:
-                     if (linkText.startsWith('http://') || linkText.startsWith('https://')) {
-                         window.open(linkText, '_blank');
-                         return;
-                     }
-                     
-                     // If it's the [Title](URL) pattern in raw markdown:
-                     const match = linkText.match(/\]\((.*?)\)/);
-                     if (match && match[1]) {
-                         window.open(match[1], '_blank');
-                         return;
-                    }
-                 }
-            }
-        }),
-        markdownDecorationsPlugin,
-        imageDecorationsField,
-        wikiLinkPlugin,
-        blockIdPlugin,
-        Prec.highest(blockIdKeymap),
-        bulletListPlugin,
-        listGuidesPlugin,
-        suggestionExtension, 
-    ], [onNavigate, getAssetUrl, saveAsset]);
-
+    // 1. Definition of State and Refs
     const [view, setView] = useState<EditorView | null>(null);
-
-    // File Upload Handling
     const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file && view) {
-            saveAsset(file).then(path => {
-                 const { from, to } = view.state.selection.main;
-                 const insertText = `![](${path})`;
-                 view.dispatch({
-                     changes: { from, to, insert: insertText },
-                     selection: { anchor: from + insertText.length }
-                 });
-                 // Focus back to editor
-                 view.focus();
-            });
-        }
-        // Reset input value to allow selecting same file again
-        if (fileInputRef.current) fileInputRef.current.value = '';
-    };
+    
+    // Naming State
+    const [namingState, setNamingState] = useState<{ file: File, from: number, to: number } | null>(null);
+    const [customName, setCustomName] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+    const namingInputRef = useRef<HTMLInputElement>(null);
 
     // Suggestion State
     const [suggestionState, setSuggestionState] = useState<SuggestionEventDetail>({
         isActive: false, trigger: null, query: '', coords: null, from: 0, to: 0
     });
-    
-    // Suggestion Items
     const [emojiItems, setEmojiItems] = useState<EmojiItem[]>([]);
-
+    
     const slashListRef = useRef<SlashCommandsListHandle>(null);
     const emojiListRef = useRef<EmojiSuggestionsHandle>(null);
     const backlinkListRef = useRef<BacklinkSuggestionsHandle>(null);
-
 
     // Listen for suggestion events
     useEffect(() => {
@@ -515,49 +457,162 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
         return () => view.dom.removeEventListener('suggestion-update', handleSuggestionUpdate);
     }, [view]);
 
-    // Scroll to block ID effect
-    useEffect(() => {
-        if (view && scrollToId) {
-            // Find the block ID in the document: "^blockId"
-            // Or if it's a heading, "# Heading" -> but usually we search for exact ^ID first
+    // Auto-save wrapper
+    const handleChange = useCallback((val: string) => {
+        onChange(val);
+    }, [onChange]);
+
+    // 2. Helper Functions (Image Naming Flow)
+    const cancelNaming = useCallback(() => {
+        if (!namingState || !view) return;
+        // Remove the placeholder
+        view.dispatch({
+            changes: { from: namingState.from, to: namingState.to, insert: '' }
+        });
+        setNamingState(null);
+        setIsSaving(false);
+        setCustomName('');
+        view.focus();
+    }, [namingState, view]);
+
+    const handleNameSubmit = useCallback(async () => {
+        if (!namingState || !view) return;
+        setIsSaving(true);
+        try {
+            const finalName = customName.trim() || `image-${Date.now()}`;
+            const path = await saveAsset(namingState.file, finalName);
             
-            const docString = view.state.doc.toString();
-            // Try explicit block ID first: " ^id" or "^id " or just "^id" at end of line?
-            // Standard: " ^id"
-            let index = docString.indexOf(` ^${scrollToId}`);
-            if (index === -1) {
-                // Try searching for heading text? 
-                // Maybe the ID passed is actually a heading text (if fallback used)
-                // Try finding "# scrollToId"
-                index = docString.indexOf(`# ${scrollToId}`);
-                if (index === -1) {
-                     // Try just the text? risky
-                     // Try exact match of block ID including caret
-                     index = docString.indexOf(`^${scrollToId}`);
-                }
-            }
-
-            if (index !== -1) {
-                const line = view.state.doc.lineAt(index);
-                // Scroll to line
-                view.dispatch({
-                    effects: EditorView.scrollIntoView(line.from, { y: 'center' }),
-                    selection: { anchor: line.from }
-                });
-                
-                // Highlight the line briefly
-                // const highlightDecoration = Decoration.line({ 
-                //    attributes: { style: "background-color: var(--primary-faded); transition: background-color 1s ease-out;" } 
-                // });
-                // Note: To implement real highlighting, we'd need a StateField. 
-                // Relying on selection is fine for now.
-            } else {
-                console.warn(`[CodeMirror] Scroll target ^${scrollToId} not found`);
-            }
+            const insertText = `![](${path})`;
+            view.dispatch({
+                changes: { from: namingState.from, to: namingState.to, insert: insertText },
+                selection: { anchor: namingState.from + insertText.length } 
+            });
+            
+            setNamingState(null);
+            setIsSaving(false);
+            setCustomName('');
+            view.focus();
+        } catch (e) {
+            console.error("Failed to save asset", e);
+            cancelNaming();
         }
-    }, [view, scrollToId]);
+    }, [namingState, view, customName, saveAsset, cancelNaming]);
 
-    // Derived Slash Items (Memoized instead of Effect)
+    // Shared handler for paste/upload to init flow
+    const initImageUpload = useCallback((file: File) => {
+        if (!view) return;
+        const { from } = view.state.selection.main;
+        const placeholder = `![Uploading...]`;
+        
+        // Insert placeholder
+        view.dispatch({
+            changes: { from, insert: placeholder },
+            selection: { anchor: from + placeholder.length } 
+        });
+
+        // Set state to trigger popover
+        setNamingState({
+            file,
+            from: from,
+            to: from + placeholder.length
+        });
+    }, [view]);
+
+     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            initImageUpload(file);
+        }
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    // Focus input when naming starts
+    useEffect(() => {
+        if (namingState && namingInputRef.current) {
+            setTimeout(() => {
+                namingInputRef.current?.focus();
+                // const ext = namingState.file.name.split('.').pop() || 'png';
+                const defaultName = `image-${Date.now()}`; 
+                setCustomName(defaultName);
+                namingInputRef.current?.select();
+            }, 50);
+        }
+    }, [namingState]);
+
+    // 3. Extensions Definition (Now can see initImageUpload)
+    const extensions = useMemo(() => [
+        markdown({ base: markdownLanguage, codeLanguages: languages }),
+        EditorView.lineWrapping,
+        EditorView.contentAttributes.of({ spellcheck: 'true', autocorrect: 'on', autocapitalize: 'on' }),
+        indentUnit.of("    "), 
+        EditorState.tabSize.of(4),
+        editorTheme,
+        EditorView.updateListener.of((update) => {
+             if (update.docChanged || update.selectionSet || update.viewportChanged || update.focusChanged) {
+                 update.view.dom.dispatchEvent(new Event('cm-update'));
+             }
+        }),
+        imageResolver.of(getAssetUrl),
+        EditorView.domEventHandlers({
+            paste: (event, _view) => { // Use underscore to avoid shadowing, but actually the view argument is correct
+                 const items = event.clipboardData?.items;
+                 if (items) {
+                     for (let i = 0; i < items.length; i++) {
+                         if (items[i].type.indexOf('image') !== -1) {
+                             event.preventDefault();
+                             const file = items[i].getAsFile();
+                             if (file) {
+                                 initImageUpload(file);
+                             }
+                         }
+                     }
+                 }
+            },
+            mousedown: (event) => {
+                 const target = event.target as HTMLElement;
+                 const link = target.closest('.cm-link') || target.closest('.cm-md-link');
+                 if (link && event.button === 0) {
+                     if (event.altKey) return;
+
+                     event.preventDefault(); 
+                     event.stopPropagation();
+                     
+                     const linkText = (link as HTMLElement).innerText; 
+                     const linkTarget = link.getAttribute('data-link-target');
+
+                     if (linkTarget) {
+                         if (onNavigate) onNavigate(linkTarget);
+                         return;
+                     }
+                     if (linkText.startsWith('[[') && linkText.endsWith(']]')) {
+                         const cleanTarget = linkText.replace(/^\[\[/, '').replace(/\]\]$/, '');
+                         if (onNavigate) onNavigate(cleanTarget);
+                         return;
+                     }
+                     if (linkText.startsWith('http://') || linkText.startsWith('https://')) {
+                         window.open(linkText, '_blank');
+                         return;
+                     }
+                     const match = linkText.match(/\]\((.*?)\)/);
+                     if (match && match[1]) {
+                         window.open(match[1], '_blank');
+                         return;
+                     }
+                 }
+            }
+        }),
+        markdownDecorationsPlugin,
+        imageDecorationsField,
+        loadingDecorationsField,
+        wikiLinkPlugin,
+        blockIdPlugin,
+        Prec.highest(blockIdKeymap),
+        bulletListPlugin,
+        listGuidesPlugin,
+        suggestionExtension, 
+    ], [onNavigate, getAssetUrl, saveAsset, initImageUpload]); // Added initImageUpload dependency
+
+    // Derived Slash Items
     const slashItems = useMemo(() => {
         if (suggestionState.trigger !== '/') return [];
         
@@ -623,11 +678,9 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                 description: 'Upload an image from your device',
                 icon: Image,
                 command: ({ editor, range }) => {
-                    // Remove the slash command text
                     editor.dispatch({
                         changes: { from: range.from, to: range.to, insert: '' }
                     });
-                    // Trigger file input
                     fileInputRef.current?.click();
                 }
             },
@@ -699,8 +752,97 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
 
         // Use capture phase to intercept before CodeMirror
         view.dom.addEventListener('keydown', handleKeyDown, true);
+        // Use capture phase to intercept before CodeMirror
+        view.dom.addEventListener('keydown', handleKeyDown, true);
         return () => view.dom.removeEventListener('keydown', handleKeyDown, true);
     }, [view, suggestionState, slashItems, emojiItems, backlinkItems]);
+
+
+    // Render Naming Popover
+    const renderNamingPopover = () => {
+        if (!namingState || !view) return null;
+
+        // Calculate position
+        const coords = view.coordsAtPos(namingState.from);
+        if (!coords) return null;
+
+        return (
+            <div style={{
+                position: 'fixed',
+                top: coords.bottom + 10,
+                left: coords.left,
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                padding: '12px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                zIndex: 2000,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                minWidth: '250px'
+            }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Name this image
+                </div>
+                <input
+                    ref={namingInputRef}
+                    type="text"
+                    value={customName}
+                    onChange={(e) => setCustomName(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleNameSubmit();
+                        if (e.key === 'Escape') cancelNaming();
+                    }}
+                    placeholder="e.g. login-flow"
+                    style={{
+                        padding: '6px 8px',
+                        borderRadius: '4px',
+                        border: '1px solid var(--border-color)',
+                        background: 'var(--bg-primary)',
+                        color: 'var(--text-primary)',
+                        width: '100%',
+                        fontSize: '13px'
+                    }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                    <button 
+                        onClick={cancelNaming}
+                        style={{
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-secondary)',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        Cancel
+                    </button>
+                    <button 
+                        onClick={handleNameSubmit}
+                        disabled={isSaving}
+                        style={{
+                            padding: '4px 12px',
+                            borderRadius: '4px',
+                            background: 'var(--primary-color)',
+                            border: 'none',
+                            color: 'white',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                        }}
+                    >
+                        {isSaving && <Loader className="w-3 h-3 spin-animation" />}
+                        Add
+                    </button>
+                </div>
+            </div>
+        );
+    };
 
 
 
@@ -906,6 +1048,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                 autoCapitalize="on"
             />
             {renderSuggestions()}
+            {renderNamingPopover()}
             <CodeMirrorSmoothCursor view={view} />
             <input 
                 type="file" 

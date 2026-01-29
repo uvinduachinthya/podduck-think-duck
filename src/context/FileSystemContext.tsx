@@ -28,7 +28,7 @@ export interface FileSystemContextType {
     openDateNote: (dateString: string) => Promise<void>;
     search: (query: string) => Promise<SearchResult[]>;
     addBlockIdToFile: (filename: string, blockText: string) => Promise<string | null>;
-    saveAsset: (file: File) => Promise<string>;
+    saveAsset: (file: File, customName?: string) => Promise<string>;
     getAssetUrl: (path: string) => Promise<string | null>;
 }
 
@@ -523,14 +523,26 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
         }
     }, [rootHandle, refreshFiles]);
 
-    const saveAsset = useCallback(async (file: File) => {
+    const saveAsset = useCallback(async (file: File, customName?: string) => {
         if (!rootHandle) throw new Error("No root directory open");
         try {
             const assetsDir = await rootHandle.getDirectoryHandle('assets', { create: true });
             
-            // Generate unique name: image-TIMESTAMP-RANDOM.ext
+            // Generate unique name: image-TIMESTAMP-RANDOM.ext OR customName.ext
             const ext = file.name.split('.').pop() || 'png';
-            const name = `image-${Date.now()}-${Math.floor(Math.random() * 1000)}.${ext}`;
+            let name;
+
+            if (customName) {
+                // Sanitize custom name: spaces to dashes, remove illegal chars
+                const safeName = customName.trim().replace(/\s+/g, '-').replace(/[<>:"/\\|?*]/g, '');
+                name = safeName.endsWith(`.${ext}`) ? safeName : `${safeName}.${ext}`;
+            } else {
+                name = `image-${Date.now()}-${Math.floor(Math.random() * 1000)}.${ext}`;
+            }
+            
+            // Check if file exists? If custom name, maybe overwrite or error? 
+            // For now, let's just overwrite or append index if collision?
+            // Simpler: Just try to write. (FileSystem API handles handle retrieval)
             
             const newFileHandle = await assetsDir.getFileHandle(name, { create: true });
             const writable = await newFileHandle.createWritable();

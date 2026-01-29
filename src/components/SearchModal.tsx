@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, FileText, Type, ArrowRight } from 'lucide-react';
+import { Search, FileText, Type, ArrowRight, Image } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 
 // It's better to export the context from a separate file, but App.tsx has it. 
@@ -180,6 +180,8 @@ export function SearchModal({ isOpen, onClose, onNavigate, search }: SearchModal
                                 >
                                     {item.type === 'page' ? (
                                         <FileText className="w-5 h-5" style={{ color: 'var(--primary-color)' }} />
+                                    ) : item.type === 'image' ? (
+                                        <Image className="w-5 h-5" style={{ color: 'var(--accent-color, #d97706)' }} />
                                     ) : (
                                         <Type className="w-5 h-5" style={{ color: 'var(--text-secondary)' }} />
                                     )}
@@ -191,9 +193,9 @@ export function SearchModal({ isOpen, onClose, onNavigate, search }: SearchModal
                                             fontSize: '14px',
                                             marginBottom: item.type === 'block' ? '2px' : '0',
                                         }}>
-                                            {item.type === 'page' ? item.title : item.title}
+                                            {item.title}
                                         </div>
-                                        {item.type === 'block' && (
+                                        {item.type === 'block' ? (
                                             <div style={{
                                                 color: 'var(--text-secondary)',
                                                 fontSize: '12px',
@@ -202,6 +204,13 @@ export function SearchModal({ isOpen, onClose, onNavigate, search }: SearchModal
                                                 gap: '4px',
                                             }}>
                                                 <span>in {item.pageName}</span>
+                                            </div>
+                                        ) : item.type === 'image' && (
+                                            <div style={{
+                                                color: 'var(--text-secondary)',
+                                                fontSize: '12px',
+                                            }}>
+                                                <span>Asset</span>
                                             </div>
                                         )}
                                     </div>

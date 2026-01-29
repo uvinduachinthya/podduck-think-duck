@@ -2,7 +2,7 @@
 // Search worker for offloading indexing and searching
 
 export interface SearchableItem {
-    type: 'page' | 'block';
+    type: 'page' | 'block' | 'image';
     id: string;
     title: string; // page name or block text
     fullContent?: string; // full block text (for blocks only)
@@ -199,6 +199,38 @@ async function updateIndexForFile(fileName: string, specificFileHandle?: FileSys
 }
 
 /**
+ * Update index for assets
+ */
+async function updateIndexForAssets(assetsHandle: FileSystemDirectoryHandle): Promise<void> {
+    const assets: SearchableItem[] = [];
+    
+    // @ts-ignore
+    for await (const entry of assetsHandle.values()) {
+        if (entry.kind === 'file') {
+            const isImage = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(entry.name);
+            if (isImage) {
+                // Simple index item for image
+                assets.push({
+                    type: 'image',
+                    id: entry.name,
+                    title: entry.name,
+                    pageName: 'Assets',
+                    pageId: entry.name,
+                    lastModified: Date.now() // We could get real mod time if needed
+                });
+            }
+        }
+    }
+
+    // Remove old image entries
+    searchIndex = searchIndex.filter(item => item.type !== 'image');
+    // Add new
+    searchIndex.push(...assets);
+    
+    // console.log(`[Worker] Indexed ${assets.length} assets`);
+}
+
+/**
  * Build search index from usage of incremental cache
  */
 async function buildSearchIndex(handle: FileSystemDirectoryHandle): Promise<void> {
@@ -229,6 +261,13 @@ async function buildSearchIndex(handle: FileSystemDirectoryHandle): Promise<void
                 // Needs Update
                 await updateIndexForFile(entry.name, fileHandle);
                 scannedCount++;
+            } else if (entry.kind === 'directory' && entry.name === 'assets') {
+                // 2. Index Assets
+                try {
+                    await updateIndexForAssets(entry as FileSystemDirectoryHandle);
+                } catch (e) {
+                    console.warn('[Worker] Failed to index assets:', e);
+                }
             }
         }
 
@@ -269,13 +308,34 @@ function calculateMatchScore(query: string, title: string): number {
 function search(query: string) {
     if (!query || query.length === 0) {
         const results = [...searchIndex]
+             // Filter out images from default "empty search" view
+            .filter(item => item.type !== 'image') 
             .sort((a, b) => b.lastModified - a.lastModified)
             .slice(0, 50);
         self.postMessage({ type: 'SEARCH_RESULTS', query, results });
         return;
     }
 
+    let targetType: string | null = null;
+    let cleanQuery = query;
+
+    if (query.startsWith('image:')) {
+        targetType = 'image';
+        cleanQuery = query.replace('image:', '').trim();
+    }
+
+    // If query is JUST "image:", return all images
+    if (targetType === 'image' && cleanQuery.length === 0) {
+         const results = searchIndex.filter(item => item.type === 'image').slice(0, 50);
+         self.postMessage({ type: 'SEARCH_RESULTS', query, results });
+         return;
+    }
+
     const matches = searchIndex
+        .filter(item => {
+            if (targetType && item.type !== targetType) return false;
+            return true;
+        })
         .map(item => ({ item, score: calculateMatchScore(query, item.title) }))
         .filter(m => m.score > 0)
         .sort((a, b) => b.score - a.score || b.item.lastModified - a.item.lastModified)
@@ -297,6 +357,28 @@ self.onmessage = async (e: MessageEvent) => {
 
         case 'UPDATE_FILE':
             await updateIndexForFile(payload);
+            break;
+
+        case 'UPDATE_ASSET':
+            // payload: filename (e.g. "image.png")
+            // We need to just add it to the index.
+            // Since we don't track asset lastModified strictly in a stats object for incremental updates efficiently yet,
+            // we can just force add/update it.
+             const assetName = payload;
+             const isImage = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(assetName);
+             if (isImage) {
+                 // Remove existing if any
+                 searchIndex = searchIndex.filter(item => item.id !== assetName);
+                 searchIndex.push({
+                    type: 'image',
+                    id: assetName,
+                    title: assetName,
+                    pageName: 'Assets',
+                    pageId: assetName,
+                    lastModified: Date.now()
+                 });
+                 // self.postMessage({ type: 'INDEX_UPDATED', fileName: assetName });
+             }
             break;
 
         case 'REMOVE_FILE':

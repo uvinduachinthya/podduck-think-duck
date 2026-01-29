@@ -45,7 +45,7 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
     const [currentFile, setCurrentFile] = useState<FileNode | null>(null);
     const [rootHandle, setRootHandle] = useState<FileSystemDirectoryHandle | null>(null);
     const syncChannel = useRef<BroadcastChannel | null>(null);
-    const { buildIndex, updateFile, removeFile, searchAsync, exportIndex, importIndex, getAffectedFilesForRename } = useSearchWorker();
+    const { buildIndex, updateFile, removeFile, searchAsync, exportIndex, importIndex, getAffectedFilesForRename, updateAsset } = useSearchWorker();
 
     // Debounced save index ref
     const saveIndexTimeoutRef = useRef<any | null>(null);
@@ -536,13 +536,16 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
             const writable = await newFileHandle.createWritable();
             await writable.write(file);
             await writable.close();
+
+            // Update search index
+            updateAsset(name);
             
             return `assets/${name}`;
         } catch (err) {
             console.error("Error saving asset:", err);
             throw err;
         }
-    }, [rootHandle]);
+    }, [rootHandle, updateAsset]);
 
     const getAssetUrl = useCallback(async (path: string) => {
         if (!rootHandle) return null;

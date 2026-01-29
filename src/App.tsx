@@ -1184,6 +1184,28 @@ export default function App() {
                         onClose={() => setIsSearchOpen(false)}
                         search={context?.search ?? (async () => [])}
                         onNavigate={(pageId) => {
+                            // Check if it's an image
+                            const isImage = /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(pageId);
+                            if (isImage) {
+                                const markdown = `![](${pageId})`; // pageId is the full path/filename for images from search currently? 
+                                // Search worker returns 'image-123.png' as ID, but let's verify.
+                                // It sets id = entry.name. 
+                                // So it's just 'image.png'.
+                                // path should be `assets/image.png` if it's in assets folder?
+                                // Context.saveAsset returns `assets/name`.
+                                // Worker indexes `entry.name`.
+                                // We should probably reconstruct `assets/${pageId}`.
+                                const assetPath = `assets/${pageId}`;
+                                const md = `![](${assetPath})`;
+                                
+                                navigator.clipboard.writeText(md).then(() => {
+                                    // ideally show a toast
+                                    alert(`Copied image markdown to clipboard: ${md}`);
+                                });
+                                setIsSearchOpen(false);
+                                return;
+                            }
+
                             const file = context?.files.find(f => f.name === `${pageId}.md` || f.name === pageId);
                             if (file) {
                                 context?.selectFile(file);

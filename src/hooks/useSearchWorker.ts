@@ -129,6 +129,11 @@ export function useSearchWorker() {
         workerRef.current.postMessage({ type: 'IMPORT_INDEX', payload: data });
     }, []);
 
+    const updateAsset = useCallback((filename: string) => {
+        if (!workerRef.current) return;
+        workerRef.current.postMessage({ type: 'UPDATE_ASSET', payload: filename });
+    }, []);
+
     return {
         searchResults,
         isIndexing,
@@ -136,6 +141,7 @@ export function useSearchWorker() {
         search,
         searchAsync,
         updateFile,
+        updateAsset,
         removeFile,
         getBacklinks,
         getAffectedFilesForRename,

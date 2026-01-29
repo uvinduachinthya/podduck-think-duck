@@ -26,7 +26,7 @@ function parseDailyNoteDate(filename: string): Date | null {
     return null;
 }
 
-export function DailyNotesList({ onSelect }: { onSelect: (file: FileNode) => void }) {
+export function DailyNotesList({ onSelect, hideHeader = false }: { onSelect: (file: FileNode) => void; hideHeader?: boolean }) {
     const { files } = useFileSystem();
 
     const dailyNotes = useMemo(() => {
@@ -42,10 +42,12 @@ export function DailyNotesList({ onSelect }: { onSelect: (file: FileNode) => voi
 
     return (
         <div style={{ padding: '40px', maxWidth: '800px', margin: '0 auto', width: '100%' }}>
-            <h1 style={{ fontSize: '24px', fontWeight: 600, marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <Calendar className="w-6 h-6" />
-                Daily Notes
-            </h1>
+            {!hideHeader && (
+                <h1 style={{ fontSize: '24px', fontWeight: 600, marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <Calendar className="w-6 h-6" />
+                    Daily Notes
+                </h1>
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {dailyNotes.length === 0 ? (

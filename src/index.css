@@ -598,7 +598,7 @@ emoji-picker::-webkit-scrollbar {
 
 /* Sidebar Note Styling */
 .sidebar-note-item {
-  padding: 12px 14px;
+  padding: 12px 20px;
   cursor: pointer;
   border-bottom: 1px solid var(--sidebar-border);
   transition: background-color 0.2s;
@@ -748,6 +748,10 @@ emoji-picker::-webkit-scrollbar {
   font-size: var(--system-font-size);
 }
 
+.sidebar-container.closed {
+  margin-left: calc(-1 * var(--sidebar-width));
+}
+
 .sidebar-header {
   display: flex;
   align-items: center;
@@ -756,6 +760,30 @@ emoji-picker::-webkit-scrollbar {
   cursor: pointer;
   background-color: var(--sidebar-hover);
   border-bottom: 1px solid var(--sidebar-border);
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.logo-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.app-name {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.sidebar-actions {
+  padding: 8px;
+  margin-bottom: 8px;
 }
 
 .sidebar-action-item {

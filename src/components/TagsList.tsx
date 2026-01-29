@@ -3,7 +3,7 @@ import type { FileNode } from '../context/FileSystemContext';
 import { Hash, FileText, ChevronRight } from 'lucide-react';
 import { useTags } from '../hooks/useTags';
 
-export function TagsList({ onSelect }: { onSelect: (file: FileNode) => void }) {
+export function TagsList({ onSelect, hideHeader = false }: { onSelect: (file: FileNode) => void; hideHeader?: boolean }) {
     const { tagsMap } = useTags();
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
@@ -120,10 +120,12 @@ export function TagsList({ onSelect }: { onSelect: (file: FileNode) => void }) {
     // Main tags list view
     return (
         <div style={{ padding: '40px', maxWidth: '800px', margin: '0 auto', width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <h1 style={{ fontSize: '24px', fontWeight: 600, marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <Hash className="w-6 h-6" />
-                Tags
-            </h1>
+            {!hideHeader && (
+                <h1 style={{ fontSize: '24px', fontWeight: 600, marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <Hash className="w-6 h-6" />
+                    Tags
+                </h1>
+            )}
 
             {sortedTags.length === 0 ? (
                 <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>

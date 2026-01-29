@@ -28,6 +28,8 @@ export interface FileSystemContextType {
     openDateNote: (dateString: string) => Promise<void>;
     search: (query: string) => Promise<SearchResult[]>;
     addBlockIdToFile: (filename: string, blockText: string) => Promise<string | null>;
+    saveAsset: (file: File) => Promise<string>;
+    getAssetUrl: (path: string) => Promise<string | null>;
 }
 
 export const FileSystemContext = createContext<FileSystemContextType | undefined>(undefined);
@@ -521,8 +523,56 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
         }
     }, [rootHandle, refreshFiles]);
 
+    const saveAsset = useCallback(async (file: File) => {
+        if (!rootHandle) throw new Error("No root directory open");
+        try {
+            const assetsDir = await rootHandle.getDirectoryHandle('assets', { create: true });
+            
+            // Generate unique name: image-TIMESTAMP-RANDOM.ext
+            const ext = file.name.split('.').pop() || 'png';
+            const name = `image-${Date.now()}-${Math.floor(Math.random() * 1000)}.${ext}`;
+            
+            const newFileHandle = await assetsDir.getFileHandle(name, { create: true });
+            const writable = await newFileHandle.createWritable();
+            await writable.write(file);
+            await writable.close();
+            
+            return `assets/${name}`;
+        } catch (err) {
+            console.error("Error saving asset:", err);
+            throw err;
+        }
+    }, [rootHandle]);
+
+    const getAssetUrl = useCallback(async (path: string) => {
+        if (!rootHandle) return null;
+        try {
+            // Check if path starts with assets/
+            const parts = path.split('/');
+            if (parts.length > 1 && parts[0] === 'assets') {
+                const assetsDir = await rootHandle.getDirectoryHandle('assets');
+                const fileHandle = await assetsDir.getFileHandle(parts[1]);
+                const file = await fileHandle.getFile();
+                return URL.createObjectURL(file);
+            }
+            
+            // Fallback: try root
+            try {
+                const fileHandle = await rootHandle.getFileHandle(path);
+                const file = await fileHandle.getFile();
+                return URL.createObjectURL(file);
+            } catch (e) {
+                 // Not in root either
+                 return null;
+            }
+        } catch (err) {
+            console.error("Error loading asset url for:", path, err);
+            return null;
+        }
+    }, [rootHandle]);
+
     return (
-        <FileSystemContext.Provider value={{ folderName, files, currentFile, rootHandle, openDirectory, closeDirectory, selectFile, saveFile, createNewNote, renameFile, deleteFile, restoreFile, openDailyNoteManually, openDateNote, search: searchAsync, addBlockIdToFile }}>
+        <FileSystemContext.Provider value={{ folderName, files, currentFile, rootHandle, openDirectory, closeDirectory, selectFile, saveFile, createNewNote, renameFile, deleteFile, restoreFile, openDailyNoteManually, openDateNote, search: searchAsync, addBlockIdToFile, saveAsset, getAssetUrl }}>
             {children}
         </FileSystemContext.Provider>
     );

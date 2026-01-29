@@ -3,9 +3,10 @@ import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { EditorView, Decoration, type DecorationSet, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
-import { Range, Prec } from '@codemirror/state';
+import { Range, Prec, Facet, StateField } from '@codemirror/state';
 import { syntaxTree, indentUnit } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
+import { useFileSystem } from '../../context/FileSystemContext';
 import { CodeMirrorSmoothCursor } from './CodeMirrorSmoothCursor';
 import { suggestionExtension, type SuggestionEventDetail } from './extensions/SuggestionExtension';
 import { SlashCommandsList, type SlashCommandItem, type SlashCommandsListHandle } from '../SlashCommandsList';
@@ -45,7 +46,144 @@ const editorTheme = EditorView.theme({
     // Styles moved to src/index.css for easier global overriding
 });
 
+// --- Image Handling Helpers ---
+
+const imageResolver = Facet.define<(path: string) => Promise<string | null>, (path: string) => Promise<string | null>>({
+    combine: values => values[0]
+});
+
+class ImageBlockWidget extends WidgetType {
+    private src: string;
+    private resolver: (path: string) => Promise<string | null>;
+
+    constructor(src: string, resolver: (path: string) => Promise<string | null>) { 
+        super(); 
+        this.src = src;
+        this.resolver = resolver;
+    }
+
+    eq(other: ImageBlockWidget) { return other.src === this.src }
+
+    toDOM(view: EditorView) {
+        const div = document.createElement("div");
+        div.className = "cm-image-container";
+        // Prevent cursor placement inside
+        div.contentEditable = "false";
+        
+        const img = document.createElement("img");
+        img.className = "cm-image-widget";
+        img.style.display = "none";
+        img.style.maxWidth = "100%";
+        // img.style.maxHeight = "400px"; // Optional constraint
+
+        this.resolver(this.src).then(url => {
+            if (url) {
+                img.src = url;
+                img.style.display = "block";
+                img.onload = () => view.requestMeasure();
+            }
+        });
+        
+        div.appendChild(img);
+        return div;
+    }
+}
+
+class ImageInlineWidget extends WidgetType {
+    private src: string;
+    private resolver: (path: string) => Promise<string | null>;
+    private alt: string;
+
+    constructor(src: string, resolver: (path: string) => Promise<string | null>, alt: string) { 
+        super();
+        this.src = src;
+        this.resolver = resolver;
+        this.alt = alt;
+    }
+
+    eq(other: ImageInlineWidget) { return other.src === this.src && other.alt === this.alt }
+
+    toDOM(view: EditorView) {
+        const img = document.createElement("img");
+        img.className = "cm-image-inline-widget";
+        img.alt = this.alt;
+        img.style.display = "none";
+        
+        this.resolver(this.src).then(url => {
+            if (url) {
+                img.src = url;
+                img.style.display = "inline-block";
+                 // Limit inline height to line height roughly or a bit more?
+                img.style.height = "1.5em"; 
+                img.onload = () => view.requestMeasure();
+            }
+        });
+        return img;
+    }
+}
+
+
 // --- Live Preview Plugins ---
+
+const imageDecorationsField = StateField.define<DecorationSet>({
+    create(state) {
+        return getImageDecorations(state);
+    },
+    update(decorations, tr) {
+        if (tr.docChanged || tr.selection) {
+            return getImageDecorations(tr.state);
+        }
+        return decorations;
+    },
+    provide: f => EditorView.decorations.from(f)
+});
+
+function getImageDecorations(state: EditorState) {
+    const decorations: Range<Decoration>[] = [];
+    const selectionInfo = state.selection.main;
+
+    syntaxTree(state).iterate({
+        enter: (node) => {
+            if (node.name === "Image") {
+                const text = state.sliceDoc(node.from, node.to);
+                const match = text.match(/!\[(.*?)\]\((.*?)\)/);
+                if (match) {
+                    const alt = match[1];
+                    const src = match[2];
+                    const line = state.doc.lineAt(node.from);
+                    const lineText = line.text;
+                    const isStandalone = lineText.trim() === text;
+                    const resolver = state.facet(imageResolver);
+
+                    // Check if cursor is on this line
+                    const isCursorOnLine = selectionInfo.head >= line.from && selectionInfo.head <= line.to;
+
+                    if (isStandalone) {
+                        // 1. Hide text if cursor is NOT on this line (Order matters: from < to)
+                        if (!isCursorOnLine) {
+                            decorations.push(Decoration.replace({}).range(node.from, node.to));
+                        }
+
+                        // 2. Block Image (at node.to)
+                        decorations.push(Decoration.widget({
+                            widget: new ImageBlockWidget(src, resolver),
+                            block: true,
+                            side: 1
+                        }).range(node.to));
+                    } else {
+                        // Inline Image
+                        if (!isCursorOnLine) {
+                             decorations.push(Decoration.replace({
+                                widget: new ImageInlineWidget(src, resolver, alt)
+                             }).range(node.from, node.to));
+                        }
+                    }
+                }
+            }
+        }
+    });
+    return Decoration.set(decorations, true);
+}
 
 const markdownDecorationsPlugin = ViewPlugin.fromClass(class {
     decorations: DecorationSet;
@@ -90,7 +228,7 @@ const markdownDecorationsPlugin = ViewPlugin.fromClass(class {
                         }
                     } 
                     
-                    // 2. Bold (StrongEmphasis) -> **text**
+                    // 2. Bold
                     else if (nodeType === "StrongEmphasis") {
                          if (!isFocused) {
                              const text = state.sliceDoc(node.from, node.to);
@@ -105,7 +243,7 @@ const markdownDecorationsPlugin = ViewPlugin.fromClass(class {
                          }
                     }
                     
-                    // 3. Italic (Emphasis) -> *text*
+                    // 3. Italic
                     else if (nodeType === "Emphasis") {
                         if (!isFocused) {
                             const text = state.sliceDoc(node.from, node.to);
@@ -119,7 +257,7 @@ const markdownDecorationsPlugin = ViewPlugin.fromClass(class {
                         }
                     }
                     
-                    // 4. Strikethrough -> ~~text~~
+                    // 4. Strikethrough
                     else if (nodeType === "Strikethrough") {
                         if (!isFocused) {
                              decorations.push(Decoration.mark({ class: "cm-strike" }).range(node.from, node.to));
@@ -128,7 +266,7 @@ const markdownDecorationsPlugin = ViewPlugin.fromClass(class {
                         }
                     }
                     
-                    // 5. Inline Code -> `text`
+                    // 5. Inline Code
                     else if (nodeType === "InlineCode") {
                         if (!isFocused) {
                              const text = state.sliceDoc(node.from, node.to);
@@ -143,7 +281,7 @@ const markdownDecorationsPlugin = ViewPlugin.fromClass(class {
                         }
                     }
 
-                    // 6. Horizontal Rule -> ---
+                    // 6. Horizontal Rule
                     else if (nodeType === "HorizontalRule") {
                          const line = state.doc.lineAt(node.from);
                          const isLineFocused = selectionInfo.from >= line.from && selectionInfo.to <= line.to;
@@ -160,30 +298,9 @@ const markdownDecorationsPlugin = ViewPlugin.fromClass(class {
                          }
                     }
                     
-                    // 7. Images -> ![alt](url)
-                    else if (nodeType === "Image") {
-                         if (!isFocused) {
-                             const text = state.sliceDoc(node.from, node.to);
-                             const match = text.match(/!\[(.*?)\]\((.*?)\)/);
-                             if (match) {
-                                 const alt = match[1];
-                                 const src = match[2];
-                                 decorations.push(Decoration.replace({
-                                     widget: new class extends WidgetType {
-                                         toDOM() {
-                                             const img = document.createElement("img");
-                                             img.src = src;
-                                             img.alt = alt;
-                                             img.className = "cm-image-widget";
-                                             return img;
-                                         }
-                                     }
-                                 }).range(node.from, node.to));
-                             }
-                         }
-                    }
+                    // 7. Images logic MOVED to imageDecorationsField
                     
-                    // 8. Blockquote - apply line styling
+                    // 8. Blockquote
                     else if (nodeType === "Blockquote") {
                         const startLine = state.doc.lineAt(node.from).number;
                         const endLine = state.doc.lineAt(node.to).number;
@@ -199,7 +316,6 @@ const markdownDecorationsPlugin = ViewPlugin.fromClass(class {
                         const isLineFocused = selectionInfo.from >= line.from && selectionInfo.to <= line.to;
                         if (!isLineFocused) {
                             decorations.push(Decoration.replace({}).range(node.from, node.to));
-                             // Hide following space if present
                              const nextChar = state.sliceDoc(node.to, node.to + 1);
                              if (nextChar === ' ') decorations.push(Decoration.replace({}).range(node.to, node.to + 1));
                         }
@@ -207,19 +323,15 @@ const markdownDecorationsPlugin = ViewPlugin.fromClass(class {
                     
                     // 10. Links and URLs
                     else if (nodeType === "Link") {
-                         // Apply styling to the whole link range
                          decorations.push(Decoration.mark({ class: "cm-md-link" }).range(node.from, node.to));
-
                          const line = state.doc.lineAt(node.from);
                          const isLineFocused = selectionInfo.from >= line.from && selectionInfo.to <= line.to;
 
                          if (!isLineFocused) {
-                             // Walk children to find parts to hide
                              const cursor = node.node.cursor();
                              if (cursor.firstChild()) {
                                  do {
                                      const type = cursor.name;
-                                     // Hide brackets, parentheses, and the URL itself
                                      if (type === "LinkMark" || type === "URL") {
                                          decorations.push(Decoration.replace({}).range(cursor.from, cursor.to));
                                      }
@@ -228,7 +340,6 @@ const markdownDecorationsPlugin = ViewPlugin.fromClass(class {
                          }
                     }
                     else if (nodeType === "URL") {
-                         // Basic URL auto-links
                          decorations.push(Decoration.mark({ class: "cm-md-link" }).range(node.from, node.to));
                     }
                 }
@@ -252,6 +363,7 @@ interface CodeMirrorEditorProps {
 }
 
 export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, onNavigate, scrollToId, addBlockIdToFile }: CodeMirrorEditorProps) {
+    const { saveAsset, getAssetUrl } = useFileSystem();
     
     // Auto-save wrapper
     const handleChange = useCallback((val: string) => {
@@ -271,7 +383,29 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                  update.view.dom.dispatchEvent(new Event('cm-update'));
              }
         }),
+        imageResolver.of(getAssetUrl),
         EditorView.domEventHandlers({
+            paste: (event, view) => {
+                 const items = event.clipboardData?.items;
+                 if (items) {
+                     for (let i = 0; i < items.length; i++) {
+                         if (items[i].type.indexOf('image') !== -1) {
+                             event.preventDefault();
+                             const file = items[i].getAsFile();
+                             if (file) {
+                                 saveAsset(file).then(path => {
+                                     const { from, to } = view.state.selection.main;
+                                     const insertText = `![](${path})`;
+                                     view.dispatch({
+                                         changes: { from, to, insert: insertText },
+                                         selection: { anchor: from + insertText.length }
+                                     });
+                                 });
+                             }
+                         }
+                     }
+                 }
+            },
             mousedown: (event) => {
                  const target = event.target as HTMLElement;
                  // Check if clicked element is a link or has parent
@@ -322,13 +456,14 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
             }
         }),
         markdownDecorationsPlugin,
+        imageDecorationsField,
         wikiLinkPlugin,
         blockIdPlugin,
         Prec.highest(blockIdKeymap),
         bulletListPlugin,
         listGuidesPlugin,
         suggestionExtension, 
-    ], [onNavigate]);
+    ], [onNavigate, getAssetUrl, saveAsset]);
 
     const [view, setView] = useState<EditorView | null>(null);
 

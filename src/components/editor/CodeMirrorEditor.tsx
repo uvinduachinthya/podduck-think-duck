@@ -18,7 +18,7 @@ import { bulletListPlugin } from './extensions/BulletListPlugin';
 import { listGuidesPlugin } from './extensions/ListGuidesPlugin';
 import { searchEmojis, type EmojiItem } from '../../utils/emojiData';
 import { searchItems } from '../../utils/searchIndex';
-import { List, CheckSquare, Heading1, Heading2, Quote } from 'lucide-react';
+import { List, CheckSquare, Heading1, Heading2, Quote, Image } from 'lucide-react';
 
 // --- Theme ---
 const editorTheme = EditorView.theme({
@@ -467,6 +467,27 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
 
     const [view, setView] = useState<EditorView | null>(null);
 
+    // File Upload Handling
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file && view) {
+            saveAsset(file).then(path => {
+                 const { from, to } = view.state.selection.main;
+                 const insertText = `![](${path})`;
+                 view.dispatch({
+                     changes: { from, to, insert: insertText },
+                     selection: { anchor: from + insertText.length }
+                 });
+                 // Focus back to editor
+                 view.focus();
+            });
+        }
+        // Reset input value to allow selecting same file again
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
     // Suggestion State
     const [suggestionState, setSuggestionState] = useState<SuggestionEventDetail>({
         isActive: false, trigger: null, query: '', coords: null, from: 0, to: 0
@@ -595,6 +616,19 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                         changes: { from: range.from, to: range.to, insert: '> ' },
                         selection: { anchor: range.from + 2 }
                     });
+                }
+            },
+            {
+                title: 'Upload Image',
+                description: 'Upload an image from your device',
+                icon: Image,
+                command: ({ editor, range }) => {
+                    // Remove the slash command text
+                    editor.dispatch({
+                        changes: { from: range.from, to: range.to, insert: '' }
+                    });
+                    // Trigger file input
+                    fileInputRef.current?.click();
                 }
             },
         ];
@@ -873,6 +907,13 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
             />
             {renderSuggestions()}
             <CodeMirrorSmoothCursor view={view} />
+            <input 
+                type="file" 
+                ref={fileInputRef} 
+                style={{ display: 'none' }} 
+                accept="image/*" 
+                onChange={handleFileUpload} 
+            />
         </div>
     );
 }

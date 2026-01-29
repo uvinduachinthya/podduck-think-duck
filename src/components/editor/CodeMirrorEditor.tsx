@@ -23,8 +23,8 @@ import { markdownKeymap } from './extensions/markdownCommands';
 import { searchEmojis, type EmojiItem } from '../../utils/emojiData';
 import { searchItems } from '../../utils/searchIndex';
 import { List, CheckSquare, Heading1, Heading2, Quote, Image, Loader } from 'lucide-react';
-
-// --- Latex Widget ---
+import { autocompletion } from "@codemirror/autocomplete";
+import { tagCompletion } from "./extensions/tagCompletion";
 class LatexWidget extends WidgetType {
     constructor(readonly source: string, readonly displayMode: boolean) { super(); }
 
@@ -513,9 +513,30 @@ function getMarkdownDecorations(state: EditorState) {
                                  decorations.push(Decoration.mark({ class: "cm-code" }).range(start, end));
                              }
                          }
-                    }
-                    
-                    // 7. Images logic MOVED to imageDecorationsField
+
+                         // Hashtags #tag
+                         const tagRegex = /(?:^|\s)(#[a-zA-Z0-9_\-/]+)/g;
+                         let tagMatch;
+                         while ((tagMatch = tagRegex.exec(text)) !== null) {
+                             // Adjust start index if space was matched
+                             const matchText = tagMatch[0];
+                             const tagText = tagMatch[1];
+                             const offset = matchText.indexOf(tagText); // 0 or 1 usually
+                             const start = node.from + tagMatch.index + offset;
+                             const end = start + tagText.length;
+                             
+                             // Check overlap with code or math (basic check: inside $$?)
+                             // Current simple regex doesn't check contexts, but we depend on nodeType mostly.
+                             // Overlap with existing decorations (highlight, math) is possible but rare if syntax is clean.
+                             
+                             const isRangeFocused = (selectionInfo.from >= start && selectionInfo.from <= end) || 
+                                                  (selectionInfo.to >= start && selectionInfo.to <= end);
+
+                             // Always decorate, maybe change style when focused? 
+                             // Usually tags look like tags always.
+                             decorations.push(Decoration.mark({ class: "cm-hashtag" }).range(start, end));
+                         }
+                     }
                     
                     // 8. Blockquote
                     else if (nodeType === "Blockquote") {
@@ -711,6 +732,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                  update.view.dom.dispatchEvent(new Event('cm-update'));
              }
         }),
+        autocompletion({ override: [tagCompletion] }),
         imageResolver.of(getAssetUrl),
         EditorView.domEventHandlers({
             paste: (event, _view) => { // Use underscore to avoid shadowing, but actually the view argument is correct

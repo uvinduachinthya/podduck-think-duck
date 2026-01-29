@@ -1372,10 +1372,17 @@ emoji-picker::-webkit-scrollbar-button {
   font-style: normal !important;
 }
 .cm-highlight {
-  background-color: rgba(255, 255, 0, 0.4); /* Classic yellow highlight */
-  color: inherit;
+  background-color: #ffeb3b;
   border-radius: 2px;
   padding: 0 2px;
+}
+
+.cm-hashtag {
+    background-color: var(--muted);
+    color: var(--text-muted);
+    border-radius: 4px;
+    padding: 0 4px;
+    font-weight: 500;
 }
 .cm-strike {
   text-decoration: line-through;

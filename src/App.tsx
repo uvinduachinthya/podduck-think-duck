@@ -15,13 +15,17 @@ import {
     ExternalLink as NewTabIcon,
     AppWindow as NewWindowIcon,
     MoreVertical,
-    MoreHorizontal
+    MoreHorizontal,
+    FileText,
+    Hash
 } from 'lucide-react';
 import { CodeMirrorEditor } from './components/editor/CodeMirrorEditor';
 import { Settings } from './components/Settings';
 
 import { SmoothCursor } from './components/SmoothCursor';
 import { DailyNotesList } from './components/DailyNotesList';
+import { AllNotesList } from './components/AllNotesList';
+import { TagsList } from './components/TagsList';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog';
@@ -499,7 +503,7 @@ const SidebarItem = React.memo(({ file, context }: { file: FileNode; context: an
         </ContextMenu.Root>
     );
 });
-function Sidebar({ isOpen, onSettingsClick, onViewModeChange }: { isOpen: boolean; onSettingsClick: () => void; onViewModeChange: (mode: 'editor' | 'daily-list') => void }) {
+function Sidebar({ isOpen, onSettingsClick, onViewModeChange }: { isOpen: boolean; onSettingsClick: () => void; onViewModeChange: (mode: 'editor' | 'daily-list' | 'all-notes' | 'tags') => void }) {
     const { folderName, files, currentFile, rootHandle, createNewNote, selectFile, openDailyNoteManually, renameFile, deleteFile } = useFileSystem();
     const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null);
     const [editingFileId, setEditingFileId] = useState<string | null>(null);
@@ -600,6 +604,20 @@ function Sidebar({ isOpen, onSettingsClick, onViewModeChange }: { isOpen: boolea
                     >
                         <CalendarDaysIcon className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
                         <span>All daily notes</span>
+                    </div>
+                    <div
+                        onClick={() => onViewModeChange('all-notes')}
+                        className="sidebar-action-item"
+                    >
+                        <FileText className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
+                        <span>All Notes</span>
+                    </div>
+                    <div
+                        onClick={() => onViewModeChange('tags')}
+                        className="sidebar-action-item"
+                    >
+                        <Hash className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
+                        <span>Tags</span>
                     </div>
                     {/* New Note Button */}
                     <div
@@ -719,7 +737,7 @@ function Sidebar({ isOpen, onSettingsClick, onViewModeChange }: { isOpen: boolea
 }
 
 
-function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, onSearchClick, viewMode, setViewMode }: { isSidebarOpen: boolean; toggleSidebar: () => void; showSidebarToggle?: boolean; onSearchClick: () => void; viewMode: 'editor' | 'daily-list'; setViewMode: (mode: 'editor' | 'daily-list') => void }) {
+function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, onSearchClick, viewMode, setViewMode }: { isSidebarOpen: boolean; toggleSidebar: () => void; showSidebarToggle?: boolean; onSearchClick: () => void; viewMode: 'editor' | 'daily-list' | 'all-notes' | 'tags'; setViewMode: (mode: 'editor' | 'daily-list' | 'all-notes' | 'tags') => void }) {
     const { currentFile, saveFile, files, deleteFile, renameFile, openDirectory, selectFile, addBlockIdToFile } = useFileSystem();
     const { theme } = useTheme();
 
@@ -988,6 +1006,20 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                             setViewMode('editor');
                         }} />
                     </div>
+                ) : viewMode === 'all-notes' ? (
+                     <div className="editor-container" style={{ width: '100%', maxWidth: '800px', height: '100%' }}>
+                        <AllNotesList onSelect={(file) => {
+                            selectFile(file);
+                            setViewMode('editor');
+                        }} />
+                    </div>
+                ) : viewMode === 'tags' ? (
+                     <div className="editor-container" style={{ width: '100%', maxWidth: '800px', height: '100%' }}>
+                        <TagsList onSelect={(file) => {
+                            selectFile(file);
+                            setViewMode('editor');
+                        }} />
+                    </div>
                 ) : (
                 <div className="editor-container">
                     <div style={{ padding: '0 40px' }}>
@@ -1118,7 +1150,7 @@ export default function App() {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [showUpdatePopup, setShowUpdatePopup] = useState(false);
-    const [viewMode, setViewMode] = useState<'editor' | 'daily-list'>('editor');
+    const [viewMode, setViewMode] = useState<'editor' | 'daily-list' | 'all-notes' | 'tags'>('editor');
 
     // Reset view mode when a file is selected via context
     // This requires us to know when currentFile changes, but we don't have direct access here 

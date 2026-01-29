@@ -47,7 +47,9 @@
     "lucide-react": "^0.556.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-force-graph-2d": "^1.29.0",
     "react-virtuoso": "^4.17.0",
+    "scheduler": "^0.27.0",
     "tippy.js": "^6.3.7"
   },
   "devDependencies": {

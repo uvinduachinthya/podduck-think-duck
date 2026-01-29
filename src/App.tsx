@@ -17,7 +17,9 @@ import {
     MoreVertical,
     MoreHorizontal,
     FileText,
-    Hash
+    Hash,
+    Network, // Graph Icon
+    Pencil as EditIcon
 } from 'lucide-react';
 import { CodeMirrorEditor } from './components/editor/CodeMirrorEditor';
 import { Settings } from './components/Settings';
@@ -27,6 +29,7 @@ import { DailyNotesList } from './components/DailyNotesList';
 import { AllNotesList } from './components/AllNotesList';
 import { TagsList } from './components/TagsList';
 import { SidebarTags } from './components/SidebarTags';
+import { GraphView } from './components/GraphView';
 import { useTags } from './hooks/useTags';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -505,7 +508,7 @@ const SidebarItem = React.memo(({ file, context }: { file: FileNode; context: an
         </ContextMenu.Root>
     );
 });
-function Sidebar({ isOpen, onSettingsClick, onViewModeChange, viewMode }: { isOpen: boolean; onSettingsClick: () => void; onViewModeChange: (mode: 'editor' | 'daily-list' | 'all-notes' | 'tags') => void; viewMode: 'editor' | 'daily-list' | 'all-notes' | 'tags' }) {
+function Sidebar({ isOpen, onSettingsClick, onViewModeChange, viewMode }: { isOpen: boolean; onSettingsClick: () => void; onViewModeChange: (mode: 'editor' | 'daily-list' | 'all-notes' | 'tags' | 'graph') => void; viewMode: 'editor' | 'daily-list' | 'all-notes' | 'tags' | 'graph' }) {
     const { folderName, files, currentFile, rootHandle, createNewNote, selectFile, openDailyNoteManually, renameFile, deleteFile } = useFileSystem();
     const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null);
     const [editingFileId, setEditingFileId] = useState<string | null>(null);
@@ -518,7 +521,7 @@ function Sidebar({ isOpen, onSettingsClick, onViewModeChange, viewMode }: { isOp
     useEffect(() => {
         if (viewMode === 'tags') {
             setActiveTab('tags');
-        } else if (viewMode === 'all-notes' || viewMode === 'daily-list') {
+        } else if (viewMode === 'all-notes' || viewMode === 'daily-list' || viewMode === 'graph') {
             setActiveTab('notes');
         }
     }, [viewMode]);
@@ -635,6 +638,13 @@ function Sidebar({ isOpen, onSettingsClick, onViewModeChange, viewMode }: { isOp
                     >
                         <Hash className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
                         <span>Tags</span>
+                    </div>
+                    <div
+                        onClick={() => onViewModeChange('graph')}
+                        className={`sidebar-action-item ${viewMode === 'graph' ? 'active' : ''}`}
+                    >
+                        <Network className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
+                        <span>Graph View</span>
                     </div>
                     {/* New Note Button */}
                     <div
@@ -792,13 +802,15 @@ function Sidebar({ isOpen, onSettingsClick, onViewModeChange, viewMode }: { isOp
 }
 
 
-function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, onSearchClick, viewMode, setViewMode }: { isSidebarOpen: boolean; toggleSidebar: () => void; showSidebarToggle?: boolean; onSearchClick: () => void; viewMode: 'editor' | 'daily-list' | 'all-notes' | 'tags'; setViewMode: (mode: 'editor' | 'daily-list' | 'all-notes' | 'tags') => void }) {
+function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, onSearchClick, viewMode, setViewMode }: { isSidebarOpen: boolean; toggleSidebar: () => void; showSidebarToggle?: boolean; onSearchClick: () => void; viewMode: 'editor' | 'daily-list' | 'all-notes' | 'tags' | 'graph'; setViewMode: (mode: 'editor' | 'daily-list' | 'all-notes' | 'tags' | 'graph') => void }) {
     const { currentFile, saveFile, files, deleteFile, renameFile, openDirectory, selectFile, addBlockIdToFile } = useFileSystem();
     const { theme } = useTheme();
 
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [currentEditor, setCurrentEditor] = useState<any>(null);
+    const [hideUnconnectedGraphNodes, setHideUnconnectedGraphNodes] = useState(false);
+    const [isGraphMenuOpen, setIsGraphMenuOpen] = useState(false);
     // showCalendar state lifted to App
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null);
@@ -965,6 +977,57 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                     <SearchIcon className="w-5 h-5" style={{ width: '20px', height: '20px' }} />
                 </button>
 
+                {/* Graph View Controls */}
+                {viewMode === 'graph' && (
+                    <div style={{ position: 'relative' }}>
+                        <button
+                            onClick={() => setIsGraphMenuOpen(!isGraphMenuOpen)}
+                            className={`icon-btn ${isGraphMenuOpen ? 'active' : ''}`}
+                            title="Graph Settings"
+                        >
+                             <EditIcon className="w-5 h-5" style={{ width: '20px', height: '20px' }} />
+                        </button>
+
+                         {isGraphMenuOpen && (
+                            <>
+                                <div
+                                    style={{
+                                        position: 'fixed',
+                                        top: 0,
+                                        left: 0,
+                                        right: 0,
+                                        bottom: 0,
+                                        zIndex: 999,
+                                    }}
+                                    onClick={() => setIsGraphMenuOpen(false)}
+                                />
+                                <div className="dropdown-menu">
+                                    <div
+                                        onClick={() => setHideUnconnectedGraphNodes(!hideUnconnectedGraphNodes)}
+                                        className="dropdown-item"
+                                        style={{ justifyContent: 'space-between' }}
+                                    >
+                                        <span>Hide unconnected nodes</span>
+                                         <div className={`checkbox ${hideUnconnectedGraphNodes ? 'checked' : ''}`} style={{
+                                            width: '16px',
+                                            height: '16px',
+                                            border: '1px solid var(--text-secondary)',
+                                            borderRadius: '3px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            background: hideUnconnectedGraphNodes ? 'var(--primary-color)' : 'transparent',
+                                            borderColor: hideUnconnectedGraphNodes ? 'var(--primary-color)' : 'var(--text-secondary)'
+                                        }}>
+                                            {hideUnconnectedGraphNodes && <div style={{ width: '8px', height: '8px', background: 'white', borderRadius: '1px' }} />}
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+
                 {/* Calendar Button - Only show if current file is a daily note */}
                 {currentFile && (
                     isDailyNote(currentFile.name) ||
@@ -1074,6 +1137,21 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                             selectFile(file);
                             setViewMode('editor');
                         }} />
+                    </div>
+                ) : viewMode === 'graph' ? (
+                     <div className="editor-container" style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+                        <GraphView 
+                            onNodeClick={(nodeId) => {
+                                // files contains the file nodes. Node ID is the filename without extension.
+                                const fileName = `${nodeId}.md`;
+                                const file = files.find(f => f.name === fileName);
+                                if (file) {
+                                    selectFile(file);
+                                    setViewMode('editor');
+                                }
+                            }} 
+                            hideUnconnected={hideUnconnectedGraphNodes}
+                        />
                     </div>
                 ) : (
                 <div className="editor-container">
@@ -1205,7 +1283,7 @@ export default function App() {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [showUpdatePopup, setShowUpdatePopup] = useState(false);
-    const [viewMode, setViewMode] = useState<'editor' | 'daily-list' | 'all-notes' | 'tags'>('editor');
+    const [viewMode, setViewMode] = useState<'editor' | 'daily-list' | 'all-notes' | 'tags' | 'graph'>('editor');
 
     // Reset view mode when a file is selected via context
     // This requires us to know when currentFile changes, but we don't have direct access here 

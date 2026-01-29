@@ -20,8 +20,8 @@ import {
 import { CodeMirrorEditor } from './components/editor/CodeMirrorEditor';
 import { Settings } from './components/Settings';
 
-import { DailyNotesCalendar } from './components/DailyNotesCalendar';
 import { SmoothCursor } from './components/SmoothCursor';
+import { DailyNotesList } from './components/DailyNotesList';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog';
@@ -499,7 +499,7 @@ const SidebarItem = React.memo(({ file, context }: { file: FileNode; context: an
         </ContextMenu.Root>
     );
 });
-function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick: () => void }) {
+function Sidebar({ isOpen, onSettingsClick, onViewModeChange }: { isOpen: boolean; onSettingsClick: () => void; onViewModeChange: (mode: 'editor' | 'daily-list') => void }) {
     const { folderName, files, currentFile, rootHandle, createNewNote, selectFile, openDailyNoteManually, renameFile, deleteFile } = useFileSystem();
     const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null);
     const [editingFileId, setEditingFileId] = useState<string | null>(null);
@@ -585,11 +585,21 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
                 <div style={{ padding: '8px' }}>
                     {/* Daily Notes Section */}
                     <div
-                        onClick={openDailyNoteManually}
+                        onClick={() => {
+                            openDailyNoteManually();
+                            onViewModeChange('editor');
+                        }}
                         className={`sidebar-action-item ${isViewingDailyNote ? 'active' : ''}`}
                     >
                         <CalendarIcon className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
-                        <span>Daily Notes</span>
+                        <span>Today</span>
+                    </div>
+                    <div
+                        onClick={() => onViewModeChange('daily-list')}
+                        className="sidebar-action-item"
+                    >
+                        <CalendarDaysIcon className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
+                        <span>All daily notes</span>
                     </div>
                     {/* New Note Button */}
                     <div
@@ -614,6 +624,7 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
                                 const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
                                 createNewNote(`${baseName} ${nextNumber}`);
                             }
+                            onViewModeChange('editor');
                         }}
                         className="sidebar-action-item"
                     >
@@ -636,7 +647,20 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
                             className="no-scrollbar"
                             style={{ height: '100%' }}
                             data={regularNotes}
-                            context={{ currentFile, selectFile, editingFileId, editValue, startEditing, submitRename, cancelRename, checkDelete }}
+                            data={regularNotes}
+                            context={{ 
+                                currentFile, 
+                                selectFile: (file) => {
+                                    selectFile(file);
+                                    onViewModeChange('editor');
+                                },
+                                editingFileId, 
+                                editValue, 
+                                startEditing, 
+                                submitRename, 
+                                cancelRename, 
+                                checkDelete 
+                            }}
                             itemContent={(_index, file, context) => <SidebarItem file={file} context={context} />}
                         />
                     </div>
@@ -695,39 +719,18 @@ function Sidebar({ isOpen, onSettingsClick }: { isOpen: boolean; onSettingsClick
 }
 
 
-function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, onSearchClick }: { isSidebarOpen: boolean; toggleSidebar: () => void; showSidebarToggle?: boolean; onSearchClick: () => void }) {
-    const { currentFile, saveFile, files, openDateNote, deleteFile, renameFile, openDirectory, selectFile, addBlockIdToFile } = useFileSystem();
+function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, onSearchClick, viewMode, setViewMode }: { isSidebarOpen: boolean; toggleSidebar: () => void; showSidebarToggle?: boolean; onSearchClick: () => void; viewMode: 'editor' | 'daily-list'; setViewMode: (mode: 'editor' | 'daily-list') => void }) {
+    const { currentFile, saveFile, files, deleteFile, renameFile, openDirectory, selectFile, addBlockIdToFile } = useFileSystem();
     const { theme } = useTheme();
 
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
     const [currentEditor, setCurrentEditor] = useState<any>(null);
-    const [showCalendar, setShowCalendar] = useState(false);
+    // showCalendar state lifted to App
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null);
     const [pendingScrollTarget, setPendingScrollTarget] = useState<string | null>(null);
     const titleInputRef = useRef<HTMLInputElement>(null);
-
-    // Existing Note Dates for Calendar
-    const existingNoteDates = files
-        .map(f => {
-            const name = f.name.replace('.md', '');
-            if (/^\d{4}-\d{2}-\d{2}$/.test(name)) return name;
-
-            // Try parsing "October 20th, 2025"
-            try {
-                if (/^[A-Za-z]+ \d{1,2}(?:st|nd|rd|th), \d{4}$/.test(name)) {
-                    const parsedDate = parse(name, 'MMMM do, yyyy', new Date());
-                    if (!isNaN(parsedDate.getTime())) {
-                        return format(parsedDate, 'yyyy-MM-dd');
-                    }
-                }
-            } catch (e) {
-                // invalid date
-            }
-            return null;
-        })
-        .filter(Boolean) as string[];
 
     useEffect(() => {
         if (currentFile) {
@@ -896,30 +899,14 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                 ) && (
                         <div style={{ position: 'relative' }}>
                             <button
-                                onClick={() => setShowCalendar(!showCalendar)}
+                                onClick={() => setViewMode(viewMode === 'daily-list' ? 'editor' : 'daily-list')}
                                 className="icon-btn"
-                                title="Daily notes calendar"
+                                title="All daily notes"
                             >
                                 <CalendarDaysIcon className="w-5 h-5" style={{ width: '20px', height: '20px' }} />
                             </button>
 
-                            {showCalendar && (
-                                <div
-                                    style={{
-                                        position: 'absolute',
-                                        top: '100%',
-                                        right: 0,
-                                        marginTop: '8px',
-                                        zIndex: 1000,
-                                    }}
-                                >
-                                    <DailyNotesCalendar
-                                        onDateSelect={openDateNote}
-                                        existingNoteDates={new Set(existingNoteDates)}
-                                        onClose={() => setShowCalendar(false)}
-                                    />
-                                </div>
-                            )}
+                            {/* showCalendar logic removed in favor of viewMode */}
                         </div>
                     )}
 
@@ -992,8 +979,16 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                 </div>
             </div>
 
-            {/* Note Content */}
+            {/* Content Area */}
             <div className="editor-wrapper">
+                {viewMode === 'daily-list' ? (
+                     <div className="editor-container" style={{ width: '100%', maxWidth: '800px' }}>
+                        <DailyNotesList onSelect={(file) => {
+                            selectFile(file);
+                            setViewMode('editor');
+                        }} />
+                    </div>
+                ) : (
                 <div className="editor-container">
                     <div style={{ padding: '0 40px' }}>
                         {isEditingTitle ? (
@@ -1017,7 +1012,26 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                         )}
                     </div>
 
-                    <div className="editor-content-area">
+                    <div 
+                        className="editor-content-area"
+                        onClick={(e) => {
+                            if (!currentEditor) return;
+                            
+                            const target = e.target as HTMLElement;
+                            // Check if click is on the background (editor container, wrapper, or scroller)
+                            // But NOT on the content text itself (cm-content or its children)
+                            const isContent = target.closest('.cm-content');
+                            const isInteractive = target.closest('button, a, input, [role="button"]');
+                            
+                            if (!isContent && !isInteractive) {
+                                e.preventDefault();
+                                currentEditor.focus();
+                                // Move cursor to end of document
+                                const length = currentEditor.state.doc.length;
+                                currentEditor.dispatch({ selection: { anchor: length } });
+                            }
+                        }}
+                    >
                         <Editor
                             key={currentFile.name}
                             fileHandle={currentFile.handle}
@@ -1049,6 +1063,7 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                         <SmoothCursor editor={currentEditor} />
                     </div>
                 </div>
+                )}
             </div>
 
 
@@ -1087,6 +1102,12 @@ export default function App() {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [showUpdatePopup, setShowUpdatePopup] = useState(false);
+    const [viewMode, setViewMode] = useState<'editor' | 'daily-list'>('editor');
+
+    // Reset view mode when a file is selected via context
+    // This requires us to know when currentFile changes, but we don't have direct access here 
+    // unless we listen to it in MainContent or App.
+    // However, MainContent consumes currentFile, so let's handle auto-switch there.
 
     // Check for updates
     useEffect(() => {
@@ -1144,8 +1165,15 @@ export default function App() {
     return (
         <FileSystemProvider>
             <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
-                {!isPopup && <Sidebar isOpen={isSidebarOpen} onSettingsClick={openSettings} />}
-                <MainContent isSidebarOpen={isSidebarOpen} toggleSidebar={toggleSidebar} showSidebarToggle={!isPopup} onSearchClick={() => setIsSearchOpen(true)} />
+                {!isPopup && <Sidebar isOpen={isSidebarOpen} onSettingsClick={openSettings} onViewModeChange={setViewMode} />}
+                <MainContent 
+                    isSidebarOpen={isSidebarOpen} 
+                    toggleSidebar={toggleSidebar} 
+                    showSidebarToggle={!isPopup} 
+                    onSearchClick={() => setIsSearchOpen(true)}
+                    viewMode={viewMode}
+                    setViewMode={setViewMode}
+                />
             </div>
             {!isPopup && <Settings isOpen={isSettingsOpen} onClose={closeSettings} />}
             {!isPopup && <UpdatePopup isOpen={showUpdatePopup} onClose={closeUpdatePopup} />}

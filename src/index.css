@@ -699,6 +699,7 @@ emoji-picker::-webkit-scrollbar {
 .editor-content-area {
   flex: 1;
   padding: 0 40px 40px;
+  cursor: text;
 }
 
 /* Dropdown / Context Menus */
@@ -853,9 +854,9 @@ emoji-picker::-webkit-scrollbar-button {
 .settings-nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 6px;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.2s;
 }
@@ -869,7 +870,19 @@ emoji-picker::-webkit-scrollbar-button {
 }
 
 .settings-nav-item span {
-  font-size: 0.875em;
+  font-size: 14px;
+}
+
+.settings-tab-trigger {
+  background: transparent;
+  border: none;
+  width: 100%;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .settings-content {

@@ -30,11 +30,17 @@ const editorTheme = EditorView.theme({
     "&.cm-focused": {
         outline: "none",
     },
+    ".cm-scroller": {
+        padding: "0",
+    },
     ".cm-content": {
         fontFamily: "var(--font-family)",
         padding: "0",
         maxWidth: "900px", 
         margin: "0 auto",
+    },
+    ".cm-line": {
+        padding: "0",
     },
     // Styles moved to src/index.css for easier global overriding
 });
@@ -710,7 +716,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
     };
 
     return (
-        <div style={{ height: '100%', width: '100%', overflow: 'hidden' }}>
+        <div className="cm-wrapper" style={{ height: '100%', width: '100%', overflow: 'hidden' }}>
             <CodeMirror
                 value={content}
                 height="100%"

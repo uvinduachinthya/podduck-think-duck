@@ -2,11 +2,13 @@ import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { GFM, Subscript, Superscript, Strikethrough } from '@lezer/markdown';
+import { GFM, Subscript, Superscript, Strikethrough, type MarkdownConfig } from '@lezer/markdown';
 import { EditorView, Decoration, type DecorationSet, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
 import { Range, Prec, Facet, StateField } from '@codemirror/state';
 import { syntaxTree, indentUnit } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 import { useFileSystem } from '../../context/FileSystemContext';
 import { CodeMirrorSmoothCursor } from './CodeMirrorSmoothCursor';
 import { suggestionExtension, type SuggestionEventDetail } from './extensions/SuggestionExtension';
@@ -21,6 +23,32 @@ import { markdownKeymap } from './extensions/markdownCommands';
 import { searchEmojis, type EmojiItem } from '../../utils/emojiData';
 import { searchItems } from '../../utils/searchIndex';
 import { List, CheckSquare, Heading1, Heading2, Quote, Image, Loader } from 'lucide-react';
+
+// --- Latex Widget ---
+class LatexWidget extends WidgetType {
+    constructor(readonly source: string, readonly displayMode: boolean) { super(); }
+
+    eq(other: LatexWidget) { return other.source === this.source && other.displayMode === this.displayMode; }
+
+    toDOM() {
+        const span = document.createElement("span");
+        span.className = "cm-latex-widget";
+        span.style.cursor = "default";
+        span.contentEditable = "false";
+        
+        try {
+            katex.render(this.source, span, {
+                displayMode: this.displayMode,
+                throwOnError: false
+            });
+        } catch (e) {
+            span.textContent = this.source; // Fallback
+        }
+        return span;
+    }
+    
+    ignoreEvent() { return true; }
+}
 
 // --- Theme ---
 const editorTheme = EditorView.theme({
@@ -248,28 +276,31 @@ function getLoadingDecorations(state: EditorState) {
     return Decoration.set(decorations, true);
 }
 
-const markdownDecorationsPlugin = ViewPlugin.fromClass(class {
-    decorations: DecorationSet;
-    constructor(view: EditorView) {
-        this.decorations = this.getDecorations(view);
-    }
-    update(update: ViewUpdate) {
-        if (update.docChanged || update.viewportChanged || update.selectionSet) {
-            this.decorations = this.getDecorations(update.view);
+const markdownDecorationsField = StateField.define<DecorationSet>({
+    create(state) {
+        return getMarkdownDecorations(state);
+    },
+    update(decorations, tr) {
+        if (tr.docChanged || tr.selection) {
+            return getMarkdownDecorations(tr.state);
         }
-    }
-    getDecorations(view: EditorView) {
-        const decorations: Range<Decoration>[] = [];
-        const { state } = view;
-        const selectionInfo = state.selection.ranges[0];
+        return decorations;
+    },
+    provide: f => EditorView.decorations.from(f)
+});
 
-        for (const { from, to } of view.visibleRanges) {
-            syntaxTree(state).iterate({
-                from, to,
-                enter: (node) => {
-                    const nodeType = node.name;
-                    const isFocused = (selectionInfo.from >= node.from && selectionInfo.to <= node.to) ||
-                                      (selectionInfo.from <= node.to && selectionInfo.to >= node.from);
+function getMarkdownDecorations(state: EditorState) {
+    const decorations: Range<Decoration>[] = [];
+    const selectionInfo = state.selection.main;
+    
+    // Iterate entire tree (ok for typical note sizes)
+    syntaxTree(state).iterate({
+        enter: (node) => {
+            const nodeType = node.name;
+            const isFocused = (selectionInfo.from >= node.from && selectionInfo.to <= node.to) ||
+                                (selectionInfo.from <= node.to && selectionInfo.to >= node.from);
+            
+
 
                     // 1. Headings
                     if (nodeType.startsWith("ATXHeading")) {
@@ -416,6 +447,73 @@ const markdownDecorationsPlugin = ViewPlugin.fromClass(class {
                              }).range(node.from, node.to));
                          }
                     }
+
+                    // 9. LaTeX (Regex-based to ensure reliability)
+                    if (nodeType === "Paragraph" || nodeType === "ATXHeading1" || nodeType === "ATXHeading2" || nodeType === "ATXHeading3" || nodeType === "ATXHeading4" || nodeType === "ATXHeading5" || nodeType === "ATXHeading6") {
+                         const text = state.sliceDoc(node.from, node.to);
+                         
+                         // Block Math $$...$$
+                         // Match $$ followed by anything lazily until $$
+                         const blockRegex = /\$\$([\s\S]+?)\$\$/g;
+                         let blockMatch;
+                         while ((blockMatch = blockRegex.exec(text)) !== null) {
+                             const start = node.from + blockMatch.index;
+                             const end = start + blockMatch[0].length;
+                             const source = blockMatch[1];
+
+                             const isRangeFocused = (selectionInfo.from >= start && selectionInfo.from <= end) || 
+                                                  (selectionInfo.to >= start && selectionInfo.to <= end);
+                             
+                             if (!isRangeFocused) {
+                                 decorations.push(Decoration.replace({
+                                     widget: new LatexWidget(source, true)
+                                     // block: true removed to avoid RangeError. KaTeX displayMode handles visual block.
+                                 }).range(start, end));
+                             } else {
+                                 decorations.push(Decoration.mark({ class: "cm-code" }).range(start, end));
+                             }
+                         }
+
+                         // Inline Math $...$
+                         // Negative lookbehind not supported everywhere, but we can verify match index
+                         // Simple regex: $ followed by non-space, then non-$ chars, ending with $
+                         const inlineRegex = /\$([^\s$](?:[^$]*?[^\s$])?)\$/g;
+                         let inlineMatch;
+                         while ((inlineMatch = inlineRegex.exec(text)) !== null) {
+                             const start = node.from + inlineMatch.index;
+                             const end = start + inlineMatch[0].length;
+                             const source = inlineMatch[1];
+
+                             // Avoid matching inside $$ block if it overlaps (Regex loop handles sequential, but nested?)
+                             // Block math check above handles $$...$$, but we need to ensure we don't double match.
+                             // Actually, since we iterate independently, we might double match.
+                             // Better strategy: Use one loop or check overlaps.
+                             // However, since $$ is parsed first, we can just ensure we don't match $$ as $
+                             // The inline regex `[^\s$]` enforces that it doesn't verify if it starts with space.
+                             // But it doesn't handle `$$`.
+                             // Quick fix: verify it's not part of a $$ block range?
+                             // Complex. simple hack: check if match[0] starts with $$ is handled by block regex above?
+                             // Actually, if I type $$foo$$, inlineRegex might match $foo$ inside?
+                             // Let's refine inline Regex to explicitly NOT match if double start/end?
+                             // Or mainly, reliance on `$$` handling first is tricky if we don't consume text.
+                             
+                             // Let's rely on checking overlaps with existing decorations? 
+                             // We are building `decorations` array.
+                             // Optimization: Just check if start/end starts with $$?
+                             if (text.startsWith('$$', inlineMatch.index)) continue; 
+
+                             const isRangeFocused = (selectionInfo.from >= start && selectionInfo.from <= end) || 
+                                                  (selectionInfo.to >= start && selectionInfo.to <= end);
+
+                             if (!isRangeFocused) {
+                                 decorations.push(Decoration.replace({
+                                     widget: new LatexWidget(source, false)
+                                 }).range(start, end));
+                             } else {
+                                 decorations.push(Decoration.mark({ class: "cm-code" }).range(start, end));
+                             }
+                         }
+                    }
                     
                     // 7. Images logic MOVED to imageDecorationsField
                     
@@ -463,12 +561,8 @@ const markdownDecorationsPlugin = ViewPlugin.fromClass(class {
                     }
                 }
             });
-        }
-        return Decoration.set(decorations, true);
-    }
-}, {
-    decorations: v => v.decorations
-});
+    return Decoration.set(decorations, true);
+}
 
 
 interface CodeMirrorEditorProps {
@@ -666,7 +760,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                  }
             }
         }),
-        markdownDecorationsPlugin,
+        markdownDecorationsField,
         imageDecorationsField,
         loadingDecorationsField,
         wikiLinkPlugin,

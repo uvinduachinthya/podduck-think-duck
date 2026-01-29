@@ -121,6 +121,8 @@ function ShortcutsSection() {
             { label: "Subscript", keys: ["Cmd", "Shift", "-"] },
             { label: "Strikethrough", keys: ["Cmd", "Shift", "S"] },
             { label: "Highlight", keys: ["Cmd", "Shift", "H"] },
+            { label: "Inline Math", keys: ["Cmd", "M"] },
+            { label: "Block Math", keys: ["Cmd", "Shift", "M"] },
             { label: "Underline", keys: ["Cmd", "U"] },
             { label: "Code Block", keys: ["Cmd", "Shift", "E"] },
         ]}

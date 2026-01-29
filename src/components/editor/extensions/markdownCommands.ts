@@ -85,6 +85,8 @@ export const markdownKeymap = keymap.of([
     { key: 'Mod-Shift--', run: toggleSubscript },
     { key: 'Mod-Shift-s', run: toggleStrikethrough },
     { key: 'Mod-Shift-h', run: toggleHighlight },
+    { key: 'Mod-m', run: toggleInlineLatex },
+    { key: 'Mod-Shift-m', run: toggleBlockLatex },
     { key: 'Mod-u', run: toggleUnderline },
     { key: 'Mod-Shift-e', run: toggleCodeBlock },
 ]);

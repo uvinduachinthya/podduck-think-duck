@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
+import { GFM, Subscript, Superscript, Strikethrough } from '@lezer/markdown';
 import { EditorView, Decoration, type DecorationSet, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
 import { Range, Prec, Facet, StateField } from '@codemirror/state';
 import { syntaxTree, indentUnit } from '@codemirror/language';
@@ -16,6 +17,7 @@ import { wikiLinkPlugin } from './extensions/WikiLinkPlugin';
 import blockIdPlugin, { blockIdKeymap } from "./extensions/BlockIdPlugin";
 import { bulletListPlugin } from './extensions/BulletListPlugin';
 import { listGuidesPlugin } from './extensions/ListGuidesPlugin';
+import { markdownKeymap } from './extensions/markdownCommands';
 import { searchEmojis, type EmojiItem } from '../../utils/emojiData';
 import { searchItems } from '../../utils/searchIndex';
 import { List, CheckSquare, Heading1, Heading2, Quote, Image, Loader } from 'lucide-react';
@@ -25,7 +27,7 @@ const editorTheme = EditorView.theme({
     "&": {
         backgroundColor: "var(--bg-primary)",
         color: "var(--text-primary)",
-        height: "100%",
+        // height: "100%", // Removed to allow auto-growth
         fontSize: "var(--editor-font-size)",
     },
     "&.cm-focused": {
@@ -33,12 +35,15 @@ const editorTheme = EditorView.theme({
     },
     ".cm-scroller": {
         padding: "0",
+        overflow: "visible", // Let it overflow so parent scrolls
     },
     ".cm-content": {
         fontFamily: "var(--font-family)",
         padding: "0",
         maxWidth: "900px", 
         margin: "0 auto",
+        overflowWrap: "anywhere",
+        wordBreak: "break-word",
     },
     ".cm-line": {
         padding: "0",
@@ -301,26 +306,82 @@ const markdownDecorationsPlugin = ViewPlugin.fromClass(class {
                          }
                     }
                     
-                    // 3. Italic
+                    // 3. Italic (*) and Underline (_)
                     else if (nodeType === "Emphasis") {
                         if (!isFocused) {
                             const text = state.sliceDoc(node.from, node.to);
                             const startMatch = text.match(/^([*_]{1})/);
                             const endMatch = text.match(/([*_]{1})$/);
                              if (startMatch && endMatch) {
-                                 decorations.push(Decoration.mark({ class: "cm-italic" }).range(node.from, node.to));
+                                 const delimiter = startMatch[1];
+                                 const className = delimiter === '_' ? "cm-underline" : "cm-italic";
+                                 
+                                 decorations.push(Decoration.mark({ class: className }).range(node.from, node.to));
                                  decorations.push(Decoration.replace({}).range(node.from, node.from + 1));
                                  decorations.push(Decoration.replace({}).range(node.to - 1, node.to));
                              }
                         }
                     }
                     
-                    // 4. Strikethrough
+                     // 4. Strikethrough
                     else if (nodeType === "Strikethrough") {
                         if (!isFocused) {
                              decorations.push(Decoration.mark({ class: "cm-strike" }).range(node.from, node.to));
                              decorations.push(Decoration.replace({}).range(node.from, node.from + 2));
                              decorations.push(Decoration.replace({}).range(node.to - 2, node.to));
+                        }
+                    }
+
+                    // Superscript ^...^ (Actually ^{...}^ with extension)
+                    // The standard Superscript extension usually uses ^...^ or ~...~ depending on config, but standard is ^
+                    // ... (Sup/Sub logic remains) ...
+                    else if (nodeType === "Superscript") {
+                        if (!isFocused) {
+                            decorations.push(Decoration.mark({ class: "cm-sup" }).range(node.from, node.to));
+                            // Hide the '^' delimiters
+                            decorations.push(Decoration.replace({}).range(node.from, node.from + 1));
+                            decorations.push(Decoration.replace({}).range(node.to - 1, node.to));
+                        }
+                    }
+                    else if (nodeType === "Subscript") {
+                         if (!isFocused) {
+                            decorations.push(Decoration.mark({ class: "cm-sub" }).range(node.from, node.to));
+                            // Hide the '~' delimiters
+                            decorations.push(Decoration.replace({}).range(node.from, node.from + 1));
+                            decorations.push(Decoration.replace({}).range(node.to - 1, node.to));
+                        }
+                    }
+
+                    // Highlight (Custom Regex since no standard parser yet)
+                    // We check purely text nodes or paragraphs?
+                    // Actually, let's just use broad text content matching for now within the visible range, but exclude if inside code?
+                    // The current iteration is by node.
+                    // If we find "==...==" in text.
+                    // NOTE: This simple regex approach inside iteration is slightly hacky if not precise with node boundaries.
+                    // But for "Paragraph", the text variable contains the whole paragraph text.
+                    // We must find matches.
+                    // Limitation: This might match inside code blocks if we iterate them?
+                    // But we can check nodeType.
+                    
+                    // Simple approach: Check text for == patterns IF we are in a Paragraph or similar.
+                    if (nodeType === "Paragraph" || nodeType === "ATXHeading1" || nodeType === "ATXHeading2" || nodeType === "ATXHeading3" || nodeType === "ATXHeading4" || nodeType === "ATXHeading5" || nodeType === "ATXHeading6") {
+                        const text = state.sliceDoc(node.from, node.to);
+                        const regex = /==([^=]+)==/g;
+                        let match;
+                        while ((match = regex.exec(text)) !== null) {
+                            const start = node.from + match.index;
+                            const end = start + match[0].length;
+                            
+                            // Check if this range overlaps with focused selection
+                            const isRangeFocused = (selectionInfo.from >= start && selectionInfo.from <= end) || 
+                                                 (selectionInfo.to >= start && selectionInfo.to <= end);
+
+                            if (!isRangeFocused) {
+                                decorations.push(Decoration.mark({ class: "cm-highlight" }).range(start, end));
+                                // Hide delimiters
+                                decorations.push(Decoration.replace({}).range(start, start + 2));
+                                decorations.push(Decoration.replace({}).range(end - 2, end));
+                            }
                         }
                     }
                     
@@ -541,7 +602,11 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
 
     // 3. Extensions Definition (Now can see initImageUpload)
     const extensions = useMemo(() => [
-        markdown({ base: markdownLanguage, codeLanguages: languages }),
+        markdown({ 
+            base: markdownLanguage, 
+            codeLanguages: languages,
+            extensions: [GFM, Subscript, Superscript, Strikethrough]
+        }),
         EditorView.lineWrapping,
         EditorView.contentAttributes.of({ spellcheck: 'true', autocorrect: 'on', autocapitalize: 'on' }),
         indentUnit.of("    "), 
@@ -609,6 +674,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
         Prec.highest(blockIdKeymap),
         bulletListPlugin,
         listGuidesPlugin,
+        Prec.highest(markdownKeymap),
         suggestionExtension, 
     ], [onNavigate, getAssetUrl, saveAsset, initImageUpload]); // Added initImageUpload dependency
 
@@ -1027,10 +1093,10 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
     };
 
     return (
-        <div className="cm-wrapper" style={{ height: '100%', width: '100%', overflow: 'hidden' }}>
+        <div className="cm-wrapper" style={{ height: 'auto', width: '100%', overflow: 'visible' }}>
             <CodeMirror
                 value={content}
-                height="100%"
+                height="auto"
                 extensions={extensions}
                 onChange={handleChange}
                 onCreateEditor={(v) => {

@@ -1366,9 +1366,30 @@ emoji-picker::-webkit-scrollbar-button {
 .cm-italic {
   font-style: italic;
 }
+.cm-underline,
+.cm-underline * {
+  text-decoration: underline;
+  font-style: normal !important;
+}
+.cm-highlight {
+  background-color: rgba(255, 255, 0, 0.4); /* Classic yellow highlight */
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 2px;
+}
 .cm-strike {
   text-decoration: line-through;
   color: var(--text-muted);
+}
+.cm-sup {
+  vertical-align: super;
+  font-size: smaller;
+  font-weight: 500;
+}
+.cm-sub {
+  vertical-align: sub;
+  font-size: smaller;
+  font-weight: 500;
 }
 
 .cm-code {
@@ -1379,6 +1400,9 @@ emoji-picker::-webkit-scrollbar-button {
     "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
   font-size: 85%;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .cm-hr {

@@ -1,4 +1,4 @@
-import { X, Sun, Type, RotateCcw, HardDrive } from 'lucide-react';
+import { X, Sun, Type, RotateCcw, HardDrive, Command } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import logo from '../assets/thinkduck-logo.png';
 import { AboutIcon } from './AboutIcon';
@@ -54,6 +54,13 @@ function SettingsTabs() {
                     </button>
                 </Tabs.Trigger>
 
+                <Tabs.Trigger value="shortcuts" className="settings-nav-item" asChild>
+                    <button className="settings-tab-trigger">
+                        <Command className="w-[18px] h-[18px]" />
+                        <span>Shortcuts</span>
+                    </button>
+                </Tabs.Trigger>
+
                 <Tabs.Trigger value="about" className="settings-nav-item" asChild>
                     <button className="settings-tab-trigger">
                         <AboutIcon style={{ width: 18, height: 18 }} />
@@ -81,11 +88,76 @@ function SettingsTabs() {
                     <FileSavesSection />
                 </Tabs.Content>
 
+                <Tabs.Content value="shortcuts" style={{ outline: 'none' }}>
+                    <ShortcutsSection />
+                </Tabs.Content>
+
                 <Tabs.Content value="about" style={{ height: '100%', outline: 'none' }}>
                     <AboutSection />
                 </Tabs.Content>
             </div>
         </Tabs.Root>
+    );
+}
+
+function ShortcutsSection() {
+    const shortcuts = [
+        { category: "Application", items: [
+            { label: "Search", keys: ["Cmd", "P"] },
+            { label: "Toggle Sidebar", keys: ["Cmd", "\\"] },
+            { label: "Toggle Theme", keys: ["Cmd", "Shift", "L"] },
+            { label: "Close Settings", keys: ["Esc"] },
+        ]},
+        { category: "Editor", items: [
+            { label: "Slash Menu", keys: ["/"] },
+            { label: "Emoji Pickle", keys: [":"] },
+            { label: "Link Note", keys: ["[["] },
+            { label: "Bold", keys: ["Cmd", "B"] },
+            { label: "Italic", keys: ["Cmd", "I"] },
+            { label: "Inline Code", keys: ["Cmd", "E"] },
+            { label: "Quote", keys: ["Cmd", "'"] },
+            { label: "Double Quote", keys: ["Cmd", "Shift", "'"] },
+            { label: "Superscript", keys: ["Cmd", "Shift", "="] },
+            { label: "Subscript", keys: ["Cmd", "Shift", "-"] },
+            { label: "Strikethrough", keys: ["Cmd", "Shift", "S"] },
+            { label: "Highlight", keys: ["Cmd", "Shift", "H"] },
+            { label: "Underline", keys: ["Cmd", "U"] },
+            { label: "Code Block", keys: ["Cmd", "Shift", "E"] },
+        ]}
+    ];
+
+    return (
+        <div>
+            {shortcuts.map((section) => (
+                <div key={section.category} className="settings-section">
+                    <h4 className="settings-section-title">{section.category}</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {section.items.map((item) => (
+                            <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+                                <span style={{ color: 'var(--text-primary)' }}>{item.label}</span>
+                                <div style={{ display: 'flex', gap: '4px' }}>
+                                    {item.keys.map((key) => (
+                                        <kbd key={key} style={{
+                                            backgroundColor: 'var(--bg-secondary)',
+                                            border: '1px solid var(--border-color)',
+                                            borderRadius: '4px',
+                                            padding: '2px 6px',
+                                            fontSize: '11px',
+                                            color: 'var(--text-secondary)',
+                                            fontFamily: 'var(--font-family)',
+                                            minWidth: '20px',
+                                            textAlign: 'center'
+                                        }}>
+                                            {key}
+                                        </kbd>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
     );
 }
 
@@ -415,7 +487,7 @@ function AboutSection() {
 
             {/* Description */}
             <p className="about-desc">
-                A beautiful, block-based note-taking app designed for your thoughts to flow freely.
+                A beautiful, markdown note-taking app designed for your thoughts to flow freely.
             </p>
 
             {/* Copyright */}

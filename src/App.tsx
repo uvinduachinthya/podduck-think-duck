@@ -1084,6 +1084,22 @@ export default function App() {
     // Check for browser support
     const isSupported = 'showDirectoryPicker' in window;
 
+    const { theme, setTheme } = useTheme();
+
+    // Global Keyboard Shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Toggle Theme: Cmd/Ctrl + Shift + L
+            if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'l') {
+                e.preventDefault();
+                setTheme(theme === 'dark' ? 'default' : 'dark');
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [theme, setTheme]);
+
     const isPopup = new URLSearchParams(window.location.search).get('mode') === 'popup';
     
     // Hooks must be called unconditionally

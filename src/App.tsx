@@ -26,6 +26,8 @@ import { SmoothCursor } from './components/SmoothCursor';
 import { DailyNotesList } from './components/DailyNotesList';
 import { AllNotesList } from './components/AllNotesList';
 import { TagsList } from './components/TagsList';
+import { SidebarTags } from './components/SidebarTags';
+import { useTags } from './hooks/useTags';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { DeleteConfirmDialog } from './components/DeleteConfirmDialog';
@@ -503,12 +505,28 @@ const SidebarItem = React.memo(({ file, context }: { file: FileNode; context: an
         </ContextMenu.Root>
     );
 });
-function Sidebar({ isOpen, onSettingsClick, onViewModeChange }: { isOpen: boolean; onSettingsClick: () => void; onViewModeChange: (mode: 'editor' | 'daily-list' | 'all-notes' | 'tags') => void }) {
+function Sidebar({ isOpen, onSettingsClick, onViewModeChange, viewMode }: { isOpen: boolean; onSettingsClick: () => void; onViewModeChange: (mode: 'editor' | 'daily-list' | 'all-notes' | 'tags') => void; viewMode: 'editor' | 'daily-list' | 'all-notes' | 'tags' }) {
     const { folderName, files, currentFile, rootHandle, createNewNote, selectFile, openDailyNoteManually, renameFile, deleteFile } = useFileSystem();
     const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null);
     const [editingFileId, setEditingFileId] = useState<string | null>(null);
     const [showCloseFolderConfirm, setShowCloseFolderConfirm] = useState(false);
     const [editValue, setEditValue] = useState('');
+    const [activeTab, setActiveTab] = useState<'notes' | 'tags'>('notes');
+    const { tagsMap } = useTags();
+
+    // Sync active tab with view mode
+    useEffect(() => {
+        if (viewMode === 'tags') {
+            setActiveTab('tags');
+        } else if (viewMode === 'all-notes' || viewMode === 'daily-list') {
+            setActiveTab('notes');
+        }
+    }, [viewMode]);
+
+    // Calculate total notes count (excluding daily notes)
+    const regularNotes = files.filter(file => !isDailyNote(file.name));
+    const notesCount = regularNotes.length;
+    const tagsCount = tagsMap.size;
 
     const startEditing = (file: FileNode) => {
         setEditingFileId(file.name);
@@ -568,9 +586,8 @@ function Sidebar({ isOpen, onSettingsClick, onViewModeChange }: { isOpen: boolea
         setDeleteCandidate(null);
     };
 
-    // Filter out daily notes from the regular notes list
-    const regularNotes = files.filter(file => !isDailyNote(file.name));
-
+    // Filter out daily notes from the regular notes list -> Moved up
+    
     // Check if current file is a daily note
     const isViewingDailyNote = currentFile ? isDailyNote(currentFile.name) : false;
 
@@ -600,21 +617,21 @@ function Sidebar({ isOpen, onSettingsClick, onViewModeChange }: { isOpen: boolea
                     </div>
                     <div
                         onClick={() => onViewModeChange('daily-list')}
-                        className="sidebar-action-item"
+                        className={`sidebar-action-item ${viewMode === 'daily-list' ? 'active' : ''}`}
                     >
                         <CalendarDaysIcon className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
                         <span>All daily notes</span>
                     </div>
                     <div
                         onClick={() => onViewModeChange('all-notes')}
-                        className="sidebar-action-item"
+                        className={`sidebar-action-item ${viewMode === 'all-notes' ? 'active' : ''}`}
                     >
                         <FileText className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
                         <span>All Notes</span>
                     </div>
                     <div
                         onClick={() => onViewModeChange('tags')}
-                        className="sidebar-action-item"
+                        className={`sidebar-action-item ${viewMode === 'tags' ? 'active' : ''}`}
                     >
                         <Hash className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
                         <span>Tags</span>
@@ -653,34 +670,72 @@ function Sidebar({ isOpen, onSettingsClick, onViewModeChange }: { isOpen: boolea
             )}
 
             {rootHandle && (
-
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '8px 8px 0', overflow: 'hidden' }}>
-                    {regularNotes.length > 0 && (
-                        <div style={{ color: 'var(--sidebar-text-muted)', padding: '8px 8px 4px', fontWeight: 600, textTransform: 'uppercase', marginLeft: '5px', fontSize: '0.75em', flexShrink: 0 }}>
-                            NOTES ({regularNotes.length})
-                        </div>
-                    )}
-                    <div style={{ flex: 1 }}>
-                        <Virtuoso
-                            className="no-scrollbar"
-                            style={{ height: '100%' }}
-                            data={regularNotes}
-                            data={regularNotes}
-                            context={{ 
-                                currentFile, 
-                                selectFile: (file) => {
-                                    selectFile(file);
-                                    onViewModeChange('editor');
-                                },
-                                editingFileId, 
-                                editValue, 
-                                startEditing, 
-                                submitRename, 
-                                cancelRename, 
-                                checkDelete 
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '0', overflow: 'hidden' }}>
+                     {/* Tabs Header */}
+                     <div style={{ 
+                         display: 'flex', 
+                         borderBottom: '1px solid var(--sidebar-border)',
+                         padding: '0 8px',
+                         marginBottom: '8px'
+                     }}>
+                        <div 
+                            onClick={() => setActiveTab('notes')}
+                            style={{
+                                padding: '8px 12px',
+                                fontSize: '0.75em',
+                                fontWeight: 600,
+                                textTransform: 'uppercase',
+                                cursor: 'pointer',
+                                color: activeTab === 'notes' ? 'var(--text-primary)' : 'var(--sidebar-text-muted)',
+                                borderBottom: activeTab === 'notes' ? '2px solid var(--primary-color)' : '2px solid transparent',
+                                transition: 'all 0.2s'
                             }}
-                            itemContent={(_index, file, context) => <SidebarItem file={file} context={context} />}
-                        />
+                        >
+                            NOTES ({notesCount})
+                        </div>
+                        <div 
+                            onClick={() => setActiveTab('tags')}
+                            style={{
+                                padding: '8px 12px',
+                                fontSize: '0.75em',
+                                fontWeight: 600,
+                                textTransform: 'uppercase',
+                                cursor: 'pointer',
+                                color: activeTab === 'tags' ? 'var(--text-primary)' : 'var(--sidebar-text-muted)',
+                                borderBottom: activeTab === 'tags' ? '2px solid var(--primary-color)' : '2px solid transparent',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            TAGS ({tagsCount})
+                        </div>
+                     </div>
+
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                        {activeTab === 'notes' ? (
+                            <Virtuoso
+                                className="no-scrollbar"
+                                style={{ height: '100%' }}
+                                data={regularNotes}
+                                context={{ 
+                                    currentFile, 
+                                    selectFile: (file) => {
+                                        selectFile(file);
+                                        onViewModeChange('editor');
+                                    },
+                                    editingFileId, 
+                                    editValue, 
+                                    startEditing, 
+                                    submitRename, 
+                                    cancelRename, 
+                                    checkDelete 
+                                }}
+                                itemContent={(_index, file, context) => <SidebarItem file={file} context={context} />}
+                            />
+                        ) : (
+                            <SidebarTags onTagClick={() => {
+                                onViewModeChange('tags');
+                            }} />
+                        )}
                     </div>
                 </div>
             )}
@@ -1213,7 +1268,7 @@ export default function App() {
     return (
         <FileSystemProvider>
             <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
-                {!isPopup && <Sidebar isOpen={isSidebarOpen} onSettingsClick={openSettings} onViewModeChange={setViewMode} />}
+                {!isPopup && <Sidebar isOpen={isSidebarOpen} onSettingsClick={openSettings} onViewModeChange={setViewMode} viewMode={viewMode} />}
                 <MainContent 
                     isSidebarOpen={isSidebarOpen} 
                     toggleSidebar={toggleSidebar} 

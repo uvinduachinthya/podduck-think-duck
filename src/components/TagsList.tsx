@@ -1,69 +1,11 @@
-import { useMemo, useState, useEffect } from 'react';
-import { useFileSystem, type FileNode } from '../context/FileSystemContext';
+import { useMemo, useState } from 'react';
+import type { FileNode } from '../context/FileSystemContext';
 import { Hash, FileText, ChevronRight } from 'lucide-react';
-
-
-interface TagInfo {
-    tag: string;
-    count: number;
-    notes: FileNode[];
-}
+import { useTags } from '../hooks/useTags';
 
 export function TagsList({ onSelect }: { onSelect: (file: FileNode) => void }) {
-    const { files } = useFileSystem();
+    const { tagsMap } = useTags();
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
-
-    // Extract all tags from all files
-    const [tagsMap, setTagsMap] = useState<Map<string, TagInfo>>(new Map());
-
-    // Extract all tags from all files
-    useEffect(() => {
-        let isMounted = true;
-
-        const extractTags = async () => {
-            const map = new Map<string, TagInfo>();
-            const tagRegex = /(?:^|\s)(#[a-zA-Z0-9_\-/]+)/g;
-
-            await Promise.all(files.map(async (fileNode) => {
-                try {
-                    const file = await fileNode.handle.getFile();
-                    const text = await file.text();
-                    
-                    const matches = Array.from(text.matchAll(tagRegex));
-                    
-                    for (const match of matches) {
-                        const tag = match[1];
-                        if (!map.has(tag)) {
-                            map.set(tag, {
-                                tag,
-                                count: 0,
-                                notes: []
-                            });
-                        }
-                        const info = map.get(tag)!;
-                        
-                        // Check if we already counted this note for this tag
-                        if (!info.notes.some(n => n.name === fileNode.name)) {
-                            info.notes.push(fileNode);
-                            info.count++;
-                        }
-                    }
-                } catch (err) {
-                    console.error("Error reading file for tags:", fileNode.name, err);
-                }
-            }));
-
-            if (isMounted) {
-                setTagsMap(map);
-            }
-        };
-
-        extractTags();
-
-        return () => {
-            isMounted = false;
-        };
-    }, [files]);
 
     // Sort tags by count (most used first)
     const sortedTags = useMemo(() => {

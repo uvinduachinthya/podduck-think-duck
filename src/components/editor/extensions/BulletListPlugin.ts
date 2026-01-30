@@ -74,13 +74,26 @@ export const bulletListPlugin = ViewPlugin.fromClass(class {
                                  })
                              });
                              
-                             // 3. Add line class for hanging indent with dynamic variable
-                             // standard space width approx 0.6em or 1ch. 
+                            // Check for nested list (Parent Item)
+                            let isParent = false;
+                            const listItem = node.node.parent;
+                            if (listItem && (listItem.name === 'ListItem' || listItem.name === 'TaskListItem')) {
+                                let child = listItem.firstChild;
+                                while(child) {
+                                    if (child.name === 'BulletList' || child.name === 'OrderedList') {
+                                        isParent = true;
+                                        break;
+                                    }
+                                    child = child.nextSibling;
+                                }
+                            }
+
+                             // 3. Add line class
                              decorations.push({
                                  from: line.from,
                                  to: line.from,
                                  value: Decoration.line({ 
-                                     class: 'cm-list-line',
+                                     class: `cm-list-line${isParent ? ' cm-list-parent' : ''}`,
                                      attributes: { style: `--indent: ${indentLength}` }
                                  })
                              });

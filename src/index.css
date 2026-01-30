@@ -1330,18 +1330,13 @@ emoji-picker::-webkit-scrollbar-button {
   width: 1.5em;
   height: 1.5em;
   vertical-align: middle;
-  cursor: pointer;
+  cursor: text;
   color: var(--primary-color);
   margin-right: 4px;
   border-radius: 50%;
   transition:
     background-color 0.2s,
     color 0.2s;
-}
-
-.bullet-point:hover {
-  background-color: rgba(0, 0, 0, 0.05);
-  color: var(--primary-hover);
 }
 
 .bullet-dot {
@@ -1501,14 +1496,27 @@ emoji-picker::-webkit-scrollbar-button {
     /* Repeating gradient for every 4ch (standard indent step) */
     background-image: repeating-linear-gradient(
         to right,
-        transparent 0,
-        transparent calc(4ch - 1px),
-        var(--border-color, rgba(0, 0, 0, 0.1)) calc(4ch - 1px),
-        var(--border-color, rgba(0, 0, 0, 0.1)) 4ch
+        var(--border-color, rgba(0, 0, 0, 0.1)) 0,
+        var(--border-color, rgba(0, 0, 0, 0.1)) 1px,
+        transparent 1px,
+        transparent 4ch
     );
     background-size: calc(var(--indent) * 1ch) 100%;
     background-repeat: no-repeat;
-    background-position: left top;
+    background-position: 12px top;
+}
+
+/* Parent List Item - Draw vertical line from bullet down */
+.cm-list-parent::after {
+    content: "";
+    position: absolute;
+    left: calc(var(--indent) * 1ch + 12px);
+    top: 22px; /* Start lower to give breathing room from bullet */
+    bottom: 0;
+    width: 1px;
+    background-color: var(--border-color, rgba(0, 0, 0, 0.1));
+    pointer-events: none;
+    z-index: 0;
 }
 
 /* Ensure bullet widget has matching fixed width in CodeMirror */
@@ -1519,4 +1527,6 @@ emoji-picker::-webkit-scrollbar-button {
     margin-right: 0 !important; /* Spacing handled by text-indent */
     display: inline-flex !important;
     vertical-align: middle;
+    position: relative;
+    z-index: 1; /* Ensure bullet is above the guide line */
 }

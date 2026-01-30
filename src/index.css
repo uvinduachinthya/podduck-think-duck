@@ -157,12 +157,24 @@ body {
 }
 
 /* Global Selection Color - Applies to title and all text */
+/* Focused selection - High Specificity Override */
+body .cm-editor .cm-selectionBackground,
+body .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
+  background-color: var(--selection-bg, rgba(0, 0, 0, 0.1)) !important;
+}
+
+/* Hide native selection inside CodeMirror to prevent double rendering */
+.cm-editor .cm-content ::selection {
+  background-color: transparent !important;
+}
+
+/* Fallback for global selection */
 ::selection {
-  background-color: color-mix(in srgb, var(--primary-color) 20%, transparent);
+  background-color: var(--selection-bg, rgba(0, 0, 0, 0.1));
 }
 
 ::-moz-selection {
-  background-color: color-mix(in srgb, var(--primary-color) 20%, transparent);
+  background-color: var(--selection-bg, rgba(0, 0, 0, 0.1));
 }
 
 /* Link Styling */
@@ -335,119 +347,93 @@ button {
   position: relative;
 }
 
-.tiptap ul li,
-.tiptap ol li {
+/* Standardize List Containers */
+.tiptap ul,
+.tiptap ol {
+  padding: 0;
   margin: 0;
-  line-height: 1.5;
-  padding-left: 1.5em;
-  position: relative;
+  list-style: none;
 }
 
-/* Bullet point styling */
+/* Ensure List Items are Layout Neutral */
+.tiptap li {
+  margin: 0;
+  padding: 0;
+  display: block;
+}
+
+/* Block List Item - The Flex Row */
 .block-list-item {
-  display: flex;
+  display: flex !important;
   align-items: flex-start;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  word-break: break-word;
+  position: relative;
+  width: 100%;
+  margin: 2px 0;
 }
 
+/* Bullet Container - Fixed Width Layout */
 .block-list-item > .bullet-point {
-  flex: 0 0 auto;
-  width: 1.5em;
-  /* Match line-height */
-  height: 1.5em;
-  /* Match line-height */
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px; /* Matches default line-height approx */
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
   user-select: none;
-  color: var(--primary-color);
-  margin-right: 4px;
-  margin-top: 0.2em;
-  transition:
-    transform 0.2s ease,
-    color 0.2s ease;
-  border-radius: 50%;
-  line-height: 1.5;
+  cursor: pointer;
+  margin-right: 4px; /* Separation from text */
+  margin-top: 0; /* Aligns with first line of text */
 }
 
-/* The actual bullet circle */
+/* Bullet styling */
+.block-list-item > .bullet-point {
+  color: var(--primary-color);
+  border-radius: 50%;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.block-list-item > .bullet-point:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
 .bullet-dot {
   width: 6px;
   height: 6px;
   background-color: currentColor;
-  /* Inherit color from parent */
-  border-radius: 50%;
-  pointer-events: none;
-  /* Let clicks pass through to container */
-}
-
-.block-list-item > .bullet-point:hover {
-  color: var(--primary-color);
-  background-color: rgba(0, 0, 0, 0.05);
-  /* Halo properties */
   border-radius: 50%;
 }
 
-.block-list-item.is-collapsed > .bullet-point {
-  color: var(--primary-color);
-  background-color: rgba(215, 73, 76, 0.1);
-  border-radius: 50%;
-}
-
-/* Remove cursor and extra space in image bullets */
-.tiptap p:has(img) {
-  margin: 0 !important;
-  padding: 0 !important;
-  line-height: 0 !important;
-  font-size: 0 !important;
+/* Content Wrapper - The Main Text Area */
+.block-list-item > .content {
+  flex: 1 1 auto;
+  min-width: 0; /* Critical for wrapping */
   display: flex;
-  caret-color: transparent;
+  flex-direction: column;
 }
 
-.tiptap p:has(img) img {
-  margin: 1.5rem 0 !important;
+/* Paragraphs within Content */
+.block-list-item > .content > p {
+  margin: 0;
+  min-height: 24px; /* Match bullet height for alignment */
+  line-height: 1.5;
   display: block;
-  width: 100%;
+  padding: 0; /* Ensure no extra padding offsets attributes */
 }
 
-.tiptap img.ProseMirror-selectednode {
-  outline: 3px solid var(--primary-color);
-  border-radius: 4px;
-}
+/* Nested Lists - Indentation via Padding on the Content Wrapper's children? 
+   No, Tiptap puts the UL inside the Content. 
+   We want nested lists to look indented relative to the PARENT TEXT.
+   Since the UL is inside .content, it starts aligned with text.
+   So we just need padding-left on the nested UL. */
 
-/* Hide children when collapsed */
-.block-list-item.is-collapsed > .content ul,
-.block-list-item.is-collapsed > .content ol {
-  display: none;
-}
-
-/* Indentation guide lines (vertical connectors) */
-/* Indentation guide lines (vertical connectors) */
 .tiptap ul ul,
 .tiptap ul ol,
 .tiptap ol ul,
 .tiptap ol ol {
   border-left: 1px solid #e0e0e0;
-  /* 
-       Align border with the center of the parent bullet.
-       Parent Bullet Width: 20px. Center: 10px.
-       Margin Right: 4px.
-       Content Offset: 24px.
-       Needed Shift: 10px - 24px = -14px.
-    */
-  margin-left: -14px;
-  /* Push children back to the right so they look indented */
-  padding-left: 28px;
-}
-
-/* Nested list items */
-.tiptap ul ul > li,
-.tiptap ol ol > li {
-  padding-left: 0;
-  /* Reset since we handle spacing in the flex item */
+  margin-left: 0; /* Align with text start */
+  padding-left: 20px; /* Push children right */
+  margin-top: 4px;
 }
 
 /* Task list styling */

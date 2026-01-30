@@ -3,7 +3,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { GFM, Subscript, Superscript, Strikethrough, type MarkdownConfig } from '@lezer/markdown';
-import { EditorView, Decoration, type DecorationSet, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
+import { EditorView, Decoration, type DecorationSet, ViewPlugin, ViewUpdate, WidgetType, drawSelection } from '@codemirror/view';
 import { Range, Prec, Facet, StateField } from '@codemirror/state';
 import { syntaxTree, indentUnit } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
@@ -25,6 +25,8 @@ import { searchItems } from '../../utils/searchIndex';
 import { List, CheckSquare, Heading1, Heading2, Quote, Image, Loader } from 'lucide-react';
 import { autocompletion } from "@codemirror/autocomplete";
 import { tagCompletion } from "./extensions/tagCompletion";
+// --- Widget Definitions ---
+
 class LatexWidget extends WidgetType {
     constructor(readonly source: string, readonly displayMode: boolean) { super(); }
 
@@ -55,7 +57,6 @@ const editorTheme = EditorView.theme({
     "&": {
         backgroundColor: "var(--bg-primary)",
         color: "var(--text-primary)",
-        // height: "100%", // Removed to allow auto-growth
         fontSize: "var(--editor-font-size)",
     },
     "&.cm-focused": {
@@ -63,7 +64,7 @@ const editorTheme = EditorView.theme({
     },
     ".cm-scroller": {
         padding: "0",
-        overflow: "visible", // Let it overflow so parent scrolls
+        overflow: "visible", 
     },
     ".cm-content": {
         fontFamily: "var(--font-family)",
@@ -76,7 +77,17 @@ const editorTheme = EditorView.theme({
     ".cm-line": {
         padding: "0",
     },
-    // Styles moved to src/index.css for easier global overriding
+    // Explicitly target selection background to ensure override
+    ".cm-selectionBackground": {
+        backgroundColor: "var(--selection-bg, rgba(0, 0, 0, 0.1)) !important"
+    },
+    // Hide native selection to avoid double-rendering
+    ".cm-content ::selection": {
+        backgroundColor: "transparent !important"
+    },
+    "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": {
+        backgroundColor: "var(--selection-bg, rgba(0, 0, 0, 0.1)) !important"
+    }
 });
 
 // --- Image Handling Helpers ---
@@ -717,6 +728,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
 
     // 3. Extensions Definition (Now can see initImageUpload)
     const extensions = useMemo(() => [
+        drawSelection(),
         markdown({ 
             base: markdownLanguage, 
             codeLanguages: languages,
@@ -734,6 +746,23 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
         }),
         autocompletion({ override: [tagCompletion] }),
         imageResolver.of(getAssetUrl),
+        EditorView.inputHandler.of((view, from, to, text) => {
+            if (text === '*' || text === '-') {
+                const line = view.state.doc.lineAt(from);
+                const lineStart = from - line.from;
+                const lineText = line.text;
+                // Check if we are at start of line (possibly indented)
+                if (/^\s*$/.test(lineText.slice(0, lineStart))) {
+                    view.dispatch({
+                        changes: { from, to, insert: text + ' ' },
+                        selection: { anchor: from + 2 },
+                        scrollIntoView: true
+                    });
+                    return true;
+                }
+            }
+            return false;
+        }),
         EditorView.domEventHandlers({
             paste: (event, _view) => { // Use underscore to avoid shadowing, but actually the view argument is correct
                  const items = event.clipboardData?.items;
@@ -1224,6 +1253,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                     lineNumbers: false,
                     foldGutter: false,
                     highlightActiveLine: false,
+                    highlightSelectionMatches: false,
                 }}
                 spellCheck={true}
                 autoCorrect="on"

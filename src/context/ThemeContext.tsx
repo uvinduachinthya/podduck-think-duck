@@ -66,6 +66,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
             // Interactive elements
             root.style.setProperty('--hover-bg', '#2a2a2a');
             root.style.setProperty('--active-bg', '#333333');
+            root.style.setProperty('--selection-bg', 'rgba(255, 255, 255, 0.15)'); // Lighter gray for dark mode
         } else {
             // Default (light) theme colors
             // Sidebar colors (dark)
@@ -87,6 +88,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
             // Interactive elements
             root.style.setProperty('--hover-bg', '#f0f0f0');
             root.style.setProperty('--active-bg', '#f8f9fa');
+            root.style.setProperty('--selection-bg', 'rgba(0, 0, 0, 0.1)'); // Darker gray for light mode
         }
 
         // Font Family

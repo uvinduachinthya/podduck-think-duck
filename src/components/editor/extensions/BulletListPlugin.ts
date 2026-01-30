@@ -34,22 +34,69 @@ export const bulletListPlugin = ViewPlugin.fromClass(class {
         const builder = new RangeSetBuilder<Decoration>();
         const { state } = view;
 
+        const decorations: { from: number; to: number; value: Decoration }[] = [];
+
         for (const { from, to } of view.visibleRanges) {
             syntaxTree(state).iterate({
                 from, to,
                 enter: (node) => {
                     if (node.name === 'ListMark') {
-                        // Check if it's an unordered list mark (hyphen, asterisk, plus)
                         const markText = state.sliceDoc(node.from, node.to);
                         if (/^[-*+]\s?$/.test(markText)) {
-                             builder.add(node.from, node.to, Decoration.replace({
-                                 widget: new BulletWidget()
-                             }));
+                             const line = state.doc.lineAt(node.from);
+                             const lineText = line.text;
+                             // Calculate indentation (spaces before mark)
+                             // node.from is start of mark. line.from is start of line.
+                             // indent length = node.from - line.from
+                             const indentLength = node.from - line.from;
+                             
+                             // 1. Hide the leading spaces (if any)
+                             if (indentLength > 0) {
+                                 decorations.push({
+                                     from: line.from,
+                                     to: node.from,
+                                     value: Decoration.replace({})
+                                 });
+                             }
+                        
+                             // 2. Add replacement widget for the bullet
+                             // Check for space after the mark
+                             let replacementTo = node.to;
+                             if (state.sliceDoc(node.to, node.to + 1) === ' ') {
+                                 replacementTo++;
+                             }
+
+                             decorations.push({
+                                 from: node.from,
+                                 to: replacementTo,
+                                 value: Decoration.replace({
+                                     widget: new BulletWidget()
+                                 })
+                             });
+                             
+                             // 3. Add line class for hanging indent with dynamic variable
+                             // standard space width approx 0.6em or 1ch. 
+                             decorations.push({
+                                 from: line.from,
+                                 to: line.from,
+                                 value: Decoration.line({ 
+                                     class: 'cm-list-line',
+                                     attributes: { style: `--indent: ${indentLength}` }
+                                 })
+                             });
                         }
                     }
                 }
             });
         }
+        
+        // Sort decorations by 'from' position
+        decorations.sort((a, b) => a.from - b.from || a.to - b.to); 
+        
+        for (const dec of decorations) {
+            builder.add(dec.from, dec.to, dec.value);
+        }
+        
         return builder.finish();
     }
 }, {

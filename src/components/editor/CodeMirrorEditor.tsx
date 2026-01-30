@@ -18,7 +18,7 @@ import { BacklinkSuggestions, type BacklinkSuggestionsHandle } from '../Backlink
 import { wikiLinkPlugin } from './extensions/WikiLinkPlugin';
 import blockIdPlugin, { blockIdKeymap } from "./extensions/BlockIdPlugin";
 import { bulletListPlugin } from './extensions/BulletListPlugin';
-import { listGuidesPlugin } from './extensions/ListGuidesPlugin';
+
 import { markdownKeymap } from './extensions/markdownCommands';
 import { searchEmojis, type EmojiItem } from '../../utils/emojiData';
 import { searchItems } from '../../utils/searchIndex';
@@ -818,7 +818,6 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
         blockIdPlugin,
         Prec.highest(blockIdKeymap),
         bulletListPlugin,
-        listGuidesPlugin,
         Prec.highest(markdownKeymap),
         suggestionExtension, 
     ], [onNavigate, getAssetUrl, saveAsset, initImageUpload]); // Added initImageUpload dependency
@@ -1254,6 +1253,11 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
                     foldGutter: false,
                     highlightActiveLine: false,
                     highlightSelectionMatches: false,
+                    allowMultipleSelections: false,
+                    bracketMatching: false,
+                    rectangularSelection: false,
+                    highlightSpecialChars: false,
+                    searchKeymap: false,
                 }}
                 spellCheck={true}
                 autoCorrect="on"

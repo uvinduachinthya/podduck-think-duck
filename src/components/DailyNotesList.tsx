@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useFileSystem, type FileNode } from '../context/FileSystemContext';
 import { format, parse, compareDesc } from 'date-fns';
-import { FileText, Calendar, Clock } from 'lucide-react';
+import { Calendar, Clock } from 'lucide-react';
 
 function isDailyNote(filename: string): boolean {
     const nameWithoutExt = filename.replace('.md', '');
@@ -89,7 +89,7 @@ export function DailyNotesList({ onSelect, hideHeader = false }: { onSelect: (fi
                                 justifyContent: 'center',
                                 color: 'var(--primary-color)'
                             }}>
-                                <FileText className="w-5 h-5" />
+                                <Calendar className="w-5 h-5" />
                             </div>
                             
                             <div style={{ flex: 1 }}>

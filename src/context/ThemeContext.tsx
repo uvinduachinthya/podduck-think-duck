@@ -102,8 +102,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         root.style.setProperty('--font-family', fontMap[fontFamily] || fontMap.default);
 
         // Font Sizes
-        const systemSizes = ['13px', '14px', '16px', '18px', '20px'];
-        const editorSizes = ['14px', '16px', '18px', '20px', '24px'];
+        const systemSizes = ['12px', '14px', '16px', '18px', '20px'];
+        const editorSizes = ['14px', '15px', '16px', '18px', '20px'];
         root.style.setProperty('--system-font-size', systemSizes[systemFontSize]);
         root.style.setProperty('--editor-font-size', editorSizes[editorFontSize]);
 

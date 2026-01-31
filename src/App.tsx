@@ -2,18 +2,16 @@ import './index.css'
 import React, { useRef, useState, useEffect, useCallback, useMemo, useReducer } from 'react';
 import { format, isToday, isYesterday, isThisWeek, isThisYear, differenceInMinutes } from 'date-fns';
 import {
-    FilePlus as AddIcon,
     Settings as SettingsIcon,
     Calendar as CalendarIcon,
-    CalendarDays as CalendarDaysIcon,
     Search as SearchIcon,
+    DiamondPlus,
     PanelLeftClose as SidebarLeftCloseIcon,
     PanelLeftOpen as SidebarLeftOpenIcon,
     Trash2 as DeleteIcon,
     Pencil as CopyIcon,
     ExternalLink as NewTabIcon,
     AppWindow as NewWindowIcon,
-    MoreVertical,
     MoreHorizontal,
     FileText,
     Network,
@@ -38,6 +36,8 @@ import { BrowserNotSupported } from './components/BrowserNotSupported';
 import { FileSystemProvider, useFileSystem, type FileNode } from './context/FileSystemContext';
 import { UpdatePopup } from './components/UpdatePopup';
 import { APP_VERSION } from './version';
+import { DailyNotesCalendar } from './components/DailyNotesCalendar';
+import { SmoothInputCursor } from './components/SmoothInputCursor';
 
 // Editor Component
 function Editor({ fileHandle, onSave, onEditorReady, onNavigate, scrollToId, addBlockIdToFile }: { fileHandle: FileSystemFileHandle; onSave: (content: string) => void; onEditorReady?: (editor: any) => void; onNavigate: (target: string) => void; scrollToId?: string | null; addBlockIdToFile?: (filename: string, blockText: string) => Promise<string | null> }) {
@@ -336,7 +336,7 @@ const SidebarItem = React.memo(({ file, context }: { file: FileNode; context: an
 });
 
 // Sidebar
-function Sidebar({ isOpen, onViewModeChange, viewMode, onSettingsClick }: { isOpen: boolean; onViewModeChange: (mode: 'editor' | 'library' | 'graph', initialLibraryTab?: 'notes' | 'daily' | 'tags' | 'links') => void; viewMode: 'editor' | 'library' | 'graph'; onSettingsClick: () => void }) {
+function Sidebar({ isOpen, onViewModeChange, viewMode, onSettingsClick, onSearchClick }: { isOpen: boolean; onViewModeChange: (mode: 'editor' | 'library' | 'graph', initialLibraryTab?: 'notes' | 'daily' | 'tags' | 'links') => void; viewMode: 'editor' | 'library' | 'graph'; onSettingsClick: () => void; onSearchClick: () => void }) {
     const { folderName, files, currentFile, rootHandle, createNewNote, selectFile, openDailyNoteManually, renameFile, deleteFile } = useFileSystem();
     const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null);
     const [editingFileId, setEditingFileId] = useState<string | null>(null);
@@ -345,13 +345,11 @@ function Sidebar({ isOpen, onViewModeChange, viewMode, onSettingsClick }: { isOp
     const [activeTab, setActiveTab] = useState<'notes' | 'tags'>('notes');
     const { tagsMap } = useTags();
 
-    useEffect(() => {
-        if (viewMode === 'library') {
-            setActiveTab('notes');
-        } else if (viewMode === 'graph') {
-            setActiveTab('notes');
-        }
-    }, [viewMode]);
+    const isTodayActive = useMemo(() => {
+        if (viewMode !== 'editor' || !currentFile) return false;
+        const todayStr = format(new Date(), 'MMMM do, yyyy') + '.md';
+        return currentFile.name === todayStr;
+    }, [currentFile, viewMode]);
 
     const regularNotes = useMemo(() => files.filter(file => !isDailyNote(file.name)), [files]);
     const notesCount = regularNotes.length;
@@ -408,18 +406,6 @@ function Sidebar({ isOpen, onViewModeChange, viewMode, onSettingsClick }: { isOp
         <div className={`sidebar-container ${isOpen ? 'open' : 'closed'}`}>
             <div className="sidebar-content">
                 <div className="sidebar-actions">
-                    <div onClick={() => { openDailyNoteManually(); onViewModeChange('editor'); }} className="sidebar-action-item">
-                        <CalendarIcon className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
-                        <span>Today</span>
-                    </div>
-                    <div onClick={() => onViewModeChange('library', 'notes')} className={`sidebar-action-item ${viewMode === 'library' ? 'active' : ''}`}>
-                         <FileText className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
-                        <span>Library</span>
-                    </div>
-                     <div onClick={() => onViewModeChange('graph')} className={`sidebar-action-item ${viewMode === 'graph' ? 'active' : ''}`}>
-                        <Network className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
-                        <span>Graph View</span>
-                    </div>
                     <div onClick={() => {
                         const baseName = 'Quack note';
                         const baseExists = files.some(f => f.name === `${baseName}.md`);
@@ -434,9 +420,25 @@ function Sidebar({ isOpen, onViewModeChange, viewMode, onSettingsClick }: { isOp
                             createNewNote(`${baseName} ${nextNumber}`);
                         }
                         onViewModeChange('editor');
-                    }} className="sidebar-action-item">
-                        <AddIcon className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
-                        <span>New Note</span>
+                    }} className="sidebar-action-item" style={{ color: 'var(--primary-color)' }}>
+                        <DiamondPlus className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
+                        <span style={{ fontWeight: 600 }}>Add new note</span>
+                    </div>
+                    <div onClick={onSearchClick} className="sidebar-action-item">
+                        <SearchIcon className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
+                        <span>Search</span>
+                    </div>
+                    <div onClick={() => { openDailyNoteManually(); onViewModeChange('editor'); }} className={`sidebar-action-item ${isTodayActive ? 'active' : ''}`}>
+                        <CalendarIcon className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
+                        <span>Today</span>
+                    </div>
+                    <div onClick={() => onViewModeChange('library', 'notes')} className={`sidebar-action-item ${viewMode === 'library' ? 'active' : ''}`}>
+                         <FileText className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
+                        <span>Library</span>
+                    </div>
+                     <div onClick={() => onViewModeChange('graph')} className={`sidebar-action-item ${viewMode === 'graph' ? 'active' : ''}`}>
+                        <Network className="w-4 h-4" style={{ width: '16px', height: '16px' }} />
+                        <span>Graph View</span>
                     </div>
                 </div>
 
@@ -492,7 +494,7 @@ function Sidebar({ isOpen, onViewModeChange, viewMode, onSettingsClick }: { isOp
 
 // Main Content
 function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, onSearchClick, viewMode, setViewMode, libraryTab }: { isSidebarOpen: boolean; toggleSidebar: () => void; showSidebarToggle?: boolean; onSearchClick: () => void; viewMode: 'editor' | 'library' | 'graph'; setViewMode: (mode: 'editor' | 'library' | 'graph') => void; libraryTab: 'notes' | 'daily' | 'tags' | 'links' }) {
-    const { currentFile, saveFile, selectFile, files, openDirectory, addBlockIdToFile, renameFile, deleteFile } = useFileSystem();
+    const { currentFile, saveFile, selectFile, files, openDirectory, addBlockIdToFile, renameFile, deleteFile, openDateNote } = useFileSystem();
     const { theme } = useTheme();
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [editedTitle, setEditedTitle] = useState('');
@@ -503,6 +505,44 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
     const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null);
     const [pendingScrollTarget, setPendingScrollTarget] = useState<string | null>(null);
     const titleInputRef = useRef<HTMLInputElement>(null);
+    const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+    const existingNoteDates = useMemo(() => {
+        const dates = new Set<string>();
+        files.forEach(f => {
+            if (isDailyNote(f.name)) {
+                // Parse date from file
+                // Try helper from DailyNotesList first, but we don't have it exported.
+                // Re-implement simplified parsing logic for now:
+                const name = f.name.replace('.md', '');
+                let dateStr = null;
+                if (/^\d{4}-\d{2}-\d{2}$/.test(name)) {
+                    dateStr = name; // Already YYYY-MM-DD
+                } else if (/^[A-Za-z]+ \d{1,2}(?:st|nd|rd|th), \d{4}$/.test(name)) { // MMMM do, yyyy
+                    try {
+                        const date = new Date(name.replace(/(\d+)(st|nd|rd|th)/, '$1')); // naive parsing might fail on 'August 1st' -> 'August 1'
+                        // Better use date-fns parse if we can reuse the pattern
+                        // Actually let's just use what date-fns format gives us for "MMMM do, yyyy"
+                        // Or rely on the Date constructor if standard enough.
+                        // Safe approach: import parse from date-fns
+                        // For simplicity in this diff, let's try assuming standard Date parser works on "Month Day, Year" if we strip 'st','nd'...
+                        const cleanDate = name.replace(/(\d+)(st|nd|rd|th),/, '$1,');
+                        const d = new Date(cleanDate);
+                        if (!isNaN(d.getTime())) {
+                             dateStr = format(d, 'yyyy-MM-dd');
+                        }
+                    } catch (e) {
+                        // ignore
+                    }
+                }
+                
+                if (dateStr) {
+                    dates.add(dateStr);
+                }
+            }
+        });
+        return dates;
+    }, [files]);
 
     useEffect(() => {
         if (currentFile) {
@@ -514,7 +554,9 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
         setIsEditingTitle(true);
         setTimeout(() => {
             titleInputRef.current?.focus();
-            titleInputRef.current?.select();
+            // Move cursor to end
+            const length = titleInputRef.current?.value.length || 0;
+            titleInputRef.current?.setSelectionRange(length, length);
         }, 0);
     };
 
@@ -556,7 +598,15 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
     };
 
     const cancelDelete = () => setDeleteCandidate(null);
-    const handleTitleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter') handleTitleBlur(); };
+    const handleTitleKeyDown = (e: React.KeyboardEvent) => { 
+        if (e.key === 'Enter') {
+            handleTitleBlur();
+            // Try to focus back to editor
+            if (currentEditor && !currentEditor.isDestroyed) {
+                currentEditor.focus();
+            }
+        }
+    };
 
     if (!currentFile) {
         return (
@@ -580,17 +630,35 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
             <div className="top-bar">
                 {showSidebarToggle && (
                     <button onClick={toggleSidebar} className="icon-btn">
-                        {isSidebarOpen ? <SidebarLeftCloseIcon className="w-5 h-5" style={{ width: '20px', height: '20px' }} /> : <SidebarLeftOpenIcon className="w-5 h-5" style={{ width: '20px', height: '20px' }} />}
+                        {isSidebarOpen ? <SidebarLeftCloseIcon className="w-5 h-5" style={{ width: '18px', height: '18px' }} /> : <SidebarLeftOpenIcon className="w-5 h-5" style={{ width: '18px', height: '18px' }} />}
                     </button>
                 )}
                 <div style={{ flex: 1 }} />
-                <button onClick={onSearchClick} className="icon-btn" title="Search (Cmd+P)">
-                    <SearchIcon className="w-5 h-5" style={{ width: '20px', height: '20px' }} />
-                </button>
+                {currentFile && isDailyNote(currentFile.name) && (
+                    <DropdownMenu.Root open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+                        <DropdownMenu.Trigger asChild>
+                            <button className="icon-btn" title="Calendar">
+                                <CalendarIcon className="w-5 h-5" style={{ width: '18px', height: '18px' }} />
+                            </button>
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Portal>
+                            <DropdownMenu.Content align="end" sideOffset={5} style={{ zIndex: 1000 }}>
+                                <DailyNotesCalendar 
+                                    onDateSelect={(dateStr) => {
+                                        openDateNote(dateStr);
+                                        setIsCalendarOpen(false);
+                                    }}
+                                    existingNoteDates={existingNoteDates}
+                                    onClose={() => setIsCalendarOpen(false)}
+                                />
+                            </DropdownMenu.Content>
+                        </DropdownMenu.Portal>
+                    </DropdownMenu.Root>
+                )}
                 {viewMode === 'graph' && (
                     <div style={{ position: 'relative' }}>
                         <button onClick={() => setIsGraphMenuOpen(!isGraphMenuOpen)} className={`icon-btn ${isGraphMenuOpen ? 'active' : ''}`} title="Graph Settings">
-                            <EditIcon className="w-5 h-5" style={{ width: '20px', height: '20px' }} />
+                            <EditIcon className="w-5 h-5" style={{ width: '18px', height: '18px' }} />
                         </button>
                         {isGraphMenuOpen && (
                             <>
@@ -609,7 +677,7 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                 )}
                 <div style={{ position: 'relative' }}>
                     <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="icon-btn" title="Options">
-                        <MoreVertical className="w-5 h-5" style={{ width: '20px', height: '20px' }} />
+                        <MoreHorizontal className="w-5 h-5" style={{ width: '18px', height: '18px' }} />
                     </button>
                     {isMenuOpen && (
                         <>
@@ -666,7 +734,10 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                 <div className="editor-container">
                     <div style={{ padding: '0 40px' }}>
                         {isEditingTitle ? (
-                            <input type="text" value={editedTitle} onChange={(e) => setEditedTitle(e.target.value)} onBlur={handleTitleBlur} onKeyDown={handleTitleKeyDown} autoFocus className="note-title note-title-input" />
+                            <>
+                                <input ref={titleInputRef} type="text" value={editedTitle} onChange={(e) => setEditedTitle(e.target.value)} onBlur={handleTitleBlur} onKeyDown={handleTitleKeyDown} autoFocus className="note-title note-title-input" />
+                                <SmoothInputCursor inputRef={titleInputRef} />
+                            </>
                         ) : (
                             <h1 onClick={handleTitleClick} className="note-title" style={{ cursor: 'text' }}>{currentFile.name.replace('.md', '')}</h1>
                         )}
@@ -752,6 +823,7 @@ function AppContent({ isPopup, showUpdatePopup, closeUpdatePopup }: { isPopup: b
                             if (tab) setLibraryTab(tab);
                         }} 
                         viewMode={viewMode}
+                        onSearchClick={() => setIsSearchOpen(true)}
                     />
                 )}
                 <MainContent 

@@ -25,7 +25,7 @@
   --active-bg: #f8f9fa;
 
   /* Layout */
-  --sidebar-width: 260px;
+  --sidebar-width: 240px;
 
   /* Typography */
   --font-family:
@@ -120,8 +120,6 @@ body {
   --accent-color: #4a90e2;
   --accent-hover: #357abd;
 
-  /* Layout */
-  --sidebar-width: 260px;
 
   /* Typography */
   --font-family:
@@ -576,10 +574,26 @@ emoji-picker::-webkit-scrollbar {
   font-size: 1.7rem;
   margin-bottom: 16px;
   margin-top: 24px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.2;
   padding: 0;
   color: var(--text-primary);
+}
+
+.note-title-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 1.7rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-primary);
+  padding: 0;
+  margin-bottom: 16px;
+  margin-top: 24px;
+  caret-color: transparent;
 }
 
 /* Sidebar Note Styling */
@@ -655,13 +669,19 @@ emoji-picker::-webkit-scrollbar {
 
 /* Top Bar */
 .top-bar {
-  height: 50px;
+  height: 44px;
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 4px;
   border-bottom: 1px solid transparent;
-  /* Keeps layout consistent if border needed later */
-  gap: 12px;
+  gap: 2px;
+}
+
+.top-bar .icon-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 6px;
 }
 
 /* Editor Layout */
@@ -776,12 +796,13 @@ emoji-picker::-webkit-scrollbar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 5px 12px;
   cursor: pointer;
   border-radius: 4px;
   background-color: transparent;
   transition: background-color 0.2s;
   margin-bottom: 4px;
+  font-weight: 500;
 }
 
 .sidebar-action-item:hover {

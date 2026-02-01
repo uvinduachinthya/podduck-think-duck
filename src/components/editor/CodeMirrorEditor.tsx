@@ -12,12 +12,15 @@ import 'katex/dist/katex.min.css';
 import { useFileSystem } from '../../context/FileSystemContext';
 import { CodeMirrorSmoothCursor } from './CodeMirrorSmoothCursor';
 import { suggestionExtension, type SuggestionEventDetail } from './extensions/SuggestionExtension';
+import { type SyntaxNodeRef } from '@lezer/common';
 import { SlashCommandsList, type SlashCommandItem, type SlashCommandsListHandle } from '../SlashCommandsList';
 import { EmojiSuggestions, type EmojiSuggestionsHandle } from '../EmojiSuggestions';
 import { BacklinkSuggestions, type BacklinkSuggestionsHandle } from '../BacklinkSuggestions';
 import { wikiLinkPlugin } from './extensions/WikiLinkPlugin';
 import blockIdPlugin, { blockIdKeymap } from "./extensions/BlockIdPlugin";
 import { bulletListPlugin } from './extensions/BulletListPlugin';
+import { taskListPlugin } from './extensions/TaskListPlugin';
+import { taskInputRulePugin } from './extensions/TaskInputRule';
 
 import { markdownKeymap } from './extensions/markdownCommands';
 import { searchEmojis, type EmojiItem } from '../../utils/emojiData';
@@ -732,7 +735,7 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
         markdown({ 
             base: markdownLanguage, 
             codeLanguages: languages,
-            extensions: [GFM, Subscript, Superscript, Strikethrough]
+            extensions: [...GFM, Subscript, Superscript, Strikethrough]
         }),
         EditorView.lineWrapping,
         EditorView.contentAttributes.of({ spellcheck: 'true', autocorrect: 'on', autocapitalize: 'on' }),
@@ -746,23 +749,6 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
         }),
         autocompletion({ override: [tagCompletion] }),
         imageResolver.of(getAssetUrl),
-        EditorView.inputHandler.of((view, from, to, text) => {
-            if (text === '*' || text === '-') {
-                const line = view.state.doc.lineAt(from);
-                const lineStart = from - line.from;
-                const lineText = line.text;
-                // Check if we are at start of line (possibly indented)
-                if (/^\s*$/.test(lineText.slice(0, lineStart))) {
-                    view.dispatch({
-                        changes: { from, to, insert: text + ' ' },
-                        selection: { anchor: from + 2 },
-                        scrollIntoView: true
-                    });
-                    return true;
-                }
-            }
-            return false;
-        }),
         EditorView.domEventHandlers({
             paste: (event, _view) => { // Use underscore to avoid shadowing, but actually the view argument is correct
                  const items = event.clipboardData?.items;
@@ -818,6 +804,8 @@ export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, o
         blockIdPlugin,
         Prec.highest(blockIdKeymap),
         bulletListPlugin,
+        taskListPlugin,
+        taskInputRulePugin,
         Prec.highest(markdownKeymap),
         suggestionExtension, 
     ], [onNavigate, getAssetUrl, saveAsset, initImageUpload]); // Added initImageUpload dependency

@@ -821,6 +821,7 @@ emoji-picker::-webkit-scrollbar {
   cursor: pointer;
   border-top: 1px solid var(--sidebar-border);
   transition: background-color 0.2s;
+  font-weight: 500;
 }
 
 .sidebar-settings-item:hover {
@@ -1550,4 +1551,59 @@ emoji-picker::-webkit-scrollbar-button {
     vertical-align: middle;
     position: relative;
     z-index: 1; /* Ensure bullet is above the guide line */
+}
+
+/* Task List Checkboxes */
+.cm-task-checkbox-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5em;
+  height: 1.5em;
+  vertical-align: middle;
+  cursor: pointer;
+  margin-right: 4px;
+  /* Shift slightly left to align with where bullet was */
+  margin-left: -2px; 
+  user-select: none;
+}
+
+.cm-task-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--text-muted);
+  border-radius: 4px;
+  background-color: transparent;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s ease;
+  margin: 0;
+}
+
+.cm-task-checkbox:hover {
+  border-color: var(--primary-color);
+}
+
+.cm-task-checkbox:checked {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.cm-task-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* Ensure alignment in list items */
+.cm-list-line .cm-task-checkbox-wrap {
+    /* Adjust if needed, but bullet-point uses similar sizing */
 }

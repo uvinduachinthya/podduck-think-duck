@@ -59,20 +59,35 @@ export const bulletListPlugin = ViewPlugin.fromClass(class {
                                  });
                              }
                         
-                             // 2. Add replacement widget for the bullet
                              // Check for space after the mark
-                             let replacementTo = node.to;
-                             if (state.sliceDoc(node.to, node.to + 1) === ' ') {
-                                 replacementTo++;
-                             }
+                             const charAfterMark = state.sliceDoc(node.to, node.to + 1);
+                             if (charAfterMark !== ' ') return; // Only decorate if followed by space
 
-                             decorations.push({
-                                 from: node.from,
-                                 to: replacementTo,
-                                 value: Decoration.replace({
-                                     widget: new BulletWidget()
-                                 })
-                             });
+                             // 2. Add replacement widget for the bullet
+                             const replacementTo = node.to + 1; // Include the space
+
+                             // Check if this is a task list item using text pattern
+                             // Robust check: Line starts with - [ ] or - [x]
+                             const isTask = /^\s*[-*+]\s+\[[ xX]\]/.test(lineText);
+
+                             if (isTask) {
+                                 // For task lists, hide the bullet point (ListMark) completely
+                                 // allow the TaskListPlugin to render the checkbox
+                                 decorations.push({
+                                     from: node.from,
+                                     to: replacementTo, // Hide '- '
+                                     value: Decoration.replace({}) // Replace with nothing
+                                 });
+                             } else {
+                                 // Standard bullet point
+                                 decorations.push({
+                                     from: node.from,
+                                     to: replacementTo,
+                                     value: Decoration.replace({
+                                         widget: new BulletWidget()
+                                     })
+                                 });
+                             }
                              
                             // Check for nested list (Parent Item)
                             let isParent = false;

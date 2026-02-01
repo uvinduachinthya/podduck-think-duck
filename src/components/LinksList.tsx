@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useFileSystem, type FileNode } from '../context/FileSystemContext';
 import { Link2, ExternalLink, FileText } from 'lucide-react';
 import { Virtuoso } from 'react-virtuoso';
@@ -77,7 +77,7 @@ export function LinksList({ hideHeader = false, onSelectFile }: { hideHeader?: b
                     <Virtuoso
                         style={{ height: '100%' }}
                         data={links}
-                        itemContent={(index, item) => (
+                        itemContent={(_index, item) => (
                              <div 
                                 style={{ 
                                     padding: '16px',

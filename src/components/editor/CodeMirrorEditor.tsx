@@ -2,8 +2,8 @@ import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { GFM, Subscript, Superscript, Strikethrough, type MarkdownConfig } from '@lezer/markdown';
-import { EditorView, Decoration, type DecorationSet, ViewPlugin, ViewUpdate, WidgetType, drawSelection } from '@codemirror/view';
+import { GFM, Subscript, Superscript, Strikethrough } from '@lezer/markdown';
+import { EditorView, Decoration, type DecorationSet, WidgetType, drawSelection } from '@codemirror/view';
 import { Range, Prec, Facet, StateField } from '@codemirror/state';
 import { syntaxTree, indentUnit } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
@@ -12,7 +12,6 @@ import 'katex/dist/katex.min.css';
 import { useFileSystem } from '../../context/FileSystemContext';
 import { CodeMirrorSmoothCursor } from './CodeMirrorSmoothCursor';
 import { suggestionExtension, type SuggestionEventDetail } from './extensions/SuggestionExtension';
-import { type SyntaxNodeRef } from '@lezer/common';
 import { SlashCommandsList, type SlashCommandItem, type SlashCommandsListHandle } from '../SlashCommandsList';
 import { EmojiSuggestions, type EmojiSuggestionsHandle } from '../EmojiSuggestions';
 import { BacklinkSuggestions, type BacklinkSuggestionsHandle } from '../BacklinkSuggestions';
@@ -31,7 +30,14 @@ import { tagCompletion } from "./extensions/tagCompletion";
 // --- Widget Definitions ---
 
 class LatexWidget extends WidgetType {
-    constructor(readonly source: string, readonly displayMode: boolean) { super(); }
+    source: string;
+    displayMode: boolean;
+    
+    constructor(source: string, displayMode: boolean) { 
+        super();
+        this.source = source;
+        this.displayMode = displayMode;
+    }
 
     eq(other: LatexWidget) { return other.source === this.source && other.displayMode === this.displayMode; }
 
@@ -542,9 +548,6 @@ function getMarkdownDecorations(state: EditorState) {
                              // Check overlap with code or math (basic check: inside $$?)
                              // Current simple regex doesn't check contexts, but we depend on nodeType mostly.
                              // Overlap with existing decorations (highlight, math) is possible but rare if syntax is clean.
-                             
-                             const isRangeFocused = (selectionInfo.from >= start && selectionInfo.from <= end) || 
-                                                  (selectionInfo.to >= start && selectionInfo.to <= end);
 
                              // Always decorate, maybe change style when focused? 
                              // Usually tags look like tags always.
@@ -610,7 +613,7 @@ interface CodeMirrorEditorProps {
     addBlockIdToFile?: (filename: string, blockText: string) => Promise<string | null>;
 }
 
-export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, onNavigate, scrollToId, addBlockIdToFile }: CodeMirrorEditorProps) {
+export function CodeMirrorEditor({ content, fileName, onChange, onEditorReady, onNavigate, addBlockIdToFile }: CodeMirrorEditorProps) {
     const { saveAsset, getAssetUrl } = useFileSystem();
     
     // 1. Definition of State and Refs

@@ -1,15 +1,14 @@
 import { ViewPlugin, ViewUpdate, EditorView } from '@codemirror/view';
-import { EditorState, Transaction } from '@codemirror/state';
 
 // Input rule to convert "[ ] " at start of line to "- [ ] "
 export const taskInputRulePugin = ViewPlugin.fromClass(class {
-    constructor(view: EditorView) {}
+    constructor(_view: EditorView) {}
     
     update(update: ViewUpdate) {
         if (update.docChanged) {
             update.transactions.forEach(tr => {
                 if (tr.isUserEvent('input')) {
-                     tr.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
+                     tr.changes.iterChanges((_fromA, _toA, fromB, toB, inserted) => {
                          const text = inserted.toString();
                          if (text === ' ') {
                              // Check text before the space

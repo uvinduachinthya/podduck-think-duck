@@ -1,8 +1,7 @@
-export const APP_VERSION = '2.0.0';
-export const RELEASE_DATE = 'January 26, 2026';
+export const APP_VERSION = '2.1.0';
+export const RELEASE_DATE = 'Feb 1, 2026';
 export const RELEASE_NOTES = [
-    "Moved to markdown format",
-    "Better support for backlinking",
-    "Safe renaming",
+    "Better overall user experience",
+    "Improved markdown support",
     "Minor bug fixes"
 ];

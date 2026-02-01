@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { AllNotesList } from './AllNotesList';
 import { DailyNotesList } from './DailyNotesList';
 import { TagsList } from './TagsList';

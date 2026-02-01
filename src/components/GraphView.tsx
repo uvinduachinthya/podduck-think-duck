@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { useFileSystem } from '../context/FileSystemContext';
 import { useTheme } from '../context/ThemeContext';

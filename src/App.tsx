@@ -445,10 +445,10 @@ function Sidebar({ isOpen, onViewModeChange, viewMode, onSettingsClick, onSearch
                 {rootHandle && (
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '0', overflow: 'hidden' }}>
                         <div style={{ display: 'flex', padding: '0 8px', marginBottom: '8px' }}>
-                            <div onClick={() => setActiveTab('notes')} style={{ padding: '8px 12px', fontSize: '0.75em', fontWeight: 600, textTransform: 'uppercase', cursor: 'pointer', color: activeTab === 'notes' ? 'var(--text-primary)' : 'var(--sidebar-text-muted)', transition: 'all 0.2s' }}>
+                            <div onClick={() => setActiveTab('notes')} style={{ padding: '8px 12px', fontSize: '0.75em', fontWeight: 600, textTransform: 'uppercase', cursor: 'pointer', color: activeTab === 'notes' ? 'var(--primary-color)' : 'var(--sidebar-text-muted)', transition: 'all 0.2s' }}>
                                 NOTES ({notesCount})
                             </div>
-                            <div onClick={() => setActiveTab('tags')} style={{ padding: '8px 12px', fontSize: '0.75em', fontWeight: 600, textTransform: 'uppercase', cursor: 'pointer', color: activeTab === 'tags' ? 'var(--text-primary)' : 'var(--sidebar-text-muted)', transition: 'all 0.2s' }}>
+                            <div onClick={() => setActiveTab('tags')} style={{ padding: '8px 12px', fontSize: '0.75em', fontWeight: 600, textTransform: 'uppercase', cursor: 'pointer', color: activeTab === 'tags' ? 'var(--primary-color)' : 'var(--sidebar-text-muted)', transition: 'all 0.2s' }}>
                                 TAGS ({tagsCount})
                             </div>
                         </div>
@@ -493,7 +493,7 @@ function Sidebar({ isOpen, onViewModeChange, viewMode, onSettingsClick, onSearch
 }
 
 // Main Content
-function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, onSearchClick, viewMode, setViewMode, libraryTab }: { isSidebarOpen: boolean; toggleSidebar: () => void; showSidebarToggle?: boolean; onSearchClick: () => void; viewMode: 'editor' | 'library' | 'graph'; setViewMode: (mode: 'editor' | 'library' | 'graph') => void; libraryTab: 'notes' | 'daily' | 'tags' | 'links' }) {
+function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, viewMode, setViewMode, libraryTab }: { isSidebarOpen: boolean; toggleSidebar: () => void; showSidebarToggle?: boolean; viewMode: 'editor' | 'library' | 'graph'; setViewMode: (mode: 'editor' | 'library' | 'graph') => void; libraryTab: 'notes' | 'daily' | 'tags' | 'links' }) {
     const { currentFile, saveFile, selectFile, files, openDirectory, addBlockIdToFile, renameFile, deleteFile, openDateNote } = useFileSystem();
     const { theme } = useTheme();
     const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -520,7 +520,6 @@ function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, o
                     dateStr = name; // Already YYYY-MM-DD
                 } else if (/^[A-Za-z]+ \d{1,2}(?:st|nd|rd|th), \d{4}$/.test(name)) { // MMMM do, yyyy
                     try {
-                        const date = new Date(name.replace(/(\d+)(st|nd|rd|th)/, '$1')); // naive parsing might fail on 'August 1st' -> 'August 1'
                         // Better use date-fns parse if we can reuse the pattern
                         // Actually let's just use what date-fns format gives us for "MMMM do, yyyy"
                         // Or rely on the Date constructor if standard enough.

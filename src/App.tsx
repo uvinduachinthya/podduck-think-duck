@@ -493,7 +493,7 @@ function Sidebar({ isOpen, onViewModeChange, viewMode, onSettingsClick, onSearch
 }
 
 // Main Content
-function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, onSearchClick, viewMode, setViewMode, libraryTab }: { isSidebarOpen: boolean; toggleSidebar: () => void; showSidebarToggle?: boolean; onSearchClick?: () => void; viewMode: 'editor' | 'library' | 'graph'; setViewMode: (mode: 'editor' | 'library' | 'graph') => void; libraryTab: 'notes' | 'daily' | 'tags' | 'links' }) {
+function MainContent({ isSidebarOpen, toggleSidebar, showSidebarToggle = true, viewMode, setViewMode, libraryTab }: { isSidebarOpen: boolean; toggleSidebar: () => void; showSidebarToggle?: boolean; viewMode: 'editor' | 'library' | 'graph'; setViewMode: (mode: 'editor' | 'library' | 'graph') => void; libraryTab: 'notes' | 'daily' | 'tags' | 'links' }) {
     const { currentFile, saveFile, selectFile, files, openDirectory, addBlockIdToFile, renameFile, deleteFile, openDateNote } = useFileSystem();
     const { theme } = useTheme();
     const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -829,7 +829,6 @@ function AppContent({ isPopup, showUpdatePopup, closeUpdatePopup }: { isPopup: b
                     isSidebarOpen={isSidebarOpen} 
                     toggleSidebar={toggleSidebar} 
                     showSidebarToggle={!isPopup} 
-                    onSearchClick={() => setIsSearchOpen(true)}
                     viewMode={viewMode}
                     setViewMode={setViewMode}
                     libraryTab={libraryTab}
